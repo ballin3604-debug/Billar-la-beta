@@ -104,7 +104,7 @@ export const TableCard: React.FC<TableCardProps> = ({
             </div>
             <div
               className="border-l border-slate-800/80 pl-2"
-              title="Hora de corte si cobras la mesa en este momento"
+              title="Hora de salida y total al corte si cobras la mesa en este momento"
             >
               <p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">
                 <LogOut className="h-2.5 w-2.5 text-sky-400/80" />
@@ -114,7 +114,10 @@ export const TableCard: React.FC<TableCardProps> = ({
                 {formatClock(new Date(nowMs))}
               </p>
             </div>
-            <div className="border-l border-slate-800/80 pl-2">
+            <div
+              className="border-l border-slate-800/80 pl-2"
+              title="Acumulado hasta el momento; se confirma al cobrar"
+            >
               <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">
                 Total
               </p>

@@ -32,7 +32,7 @@ export const DesignStageBadge: React.FC<DesignStageBadgeProps> = ({ className })
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-md border border-slate-800 bg-[#0b1422] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition hover:border-amber-500/30 hover:text-amber-300',
+          'inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-amber-500/[0.06] hover:text-amber-300',
           className
         )}
         title="Detalles de la versión de diseño"

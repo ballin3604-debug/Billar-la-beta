@@ -126,7 +126,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
                 </span>
                 <span
                   className="flex items-center gap-1"
-                  title="Hora de corte si cobras la mesa en este momento"
+                  title="Hora de salida y total al corte si cobras la mesa en este momento"
                 >
                   <LogOut className="h-3 w-3 text-sky-400/80" />
                   Salida {formatClock(new Date(now))}
@@ -251,7 +251,12 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
             <span className="num text-slate-300">{formatMoney(itemsAmount, currency)}</span>
           </div>
           <div className="flex items-end justify-between border-t border-slate-800 pt-1.5">
-            <span className="text-xs font-bold text-slate-200">Total actual</span>
+            <span
+              className="text-xs font-bold text-slate-200"
+              title="Acumulado hasta este momento; se confirma al cobrar"
+            >
+              Total al momento
+            </span>
             <span className="num text-lg font-black text-emerald-300">
               {formatMoney(total, currency)}
             </span>
