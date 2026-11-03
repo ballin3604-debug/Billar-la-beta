@@ -1,0 +1,6 @@
+{
+  "name": "BillarPro - Sistema de Control de Mesas y Ventas",
+  "description": "Sistema de gestión para billar: control de tiempo por mesa, ventas de productos, registro de pagos QR y efectivo, planilla digital de turnos y arqueo de caja.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

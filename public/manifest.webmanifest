@@ -1,0 +1,17 @@
+{
+  "name": "Billar & Bar · Caja local",
+  "short_name": "Billar Caja",
+  "description": "Caja, mesas, ventas, arqueo y auditoría para billar y bar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070d16",
+  "theme_color": "#070d16",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
