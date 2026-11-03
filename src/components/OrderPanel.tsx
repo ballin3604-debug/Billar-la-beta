@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
   Ban,
-  Clock3,
+  LogIn,
+  LogOut,
   Minus,
   Plus,
   Receipt,
@@ -118,12 +119,23 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
             </span>
             <div className="min-w-0">
               <h2 className="truncate text-sm font-bold text-white">{table.name}</h2>
-              <p className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                <Clock3 className="h-3 w-3" />
-                Desde {formatClock(session.startTime)} ·{' '}
-                <UserRound className="h-3 w-3" />
-                {session.openedByName}
-              </p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[9px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <LogIn className="h-3 w-3 text-emerald-500/80" />
+                  Entrada {formatClock(session.startTime)}
+                </span>
+                <span
+                  className="flex items-center gap-1"
+                  title="Hora de corte si cobras la mesa en este momento"
+                >
+                  <LogOut className="h-3 w-3 text-sky-400/80" />
+                  Salida {formatClock(new Date(now))}
+                </span>
+                <span className="flex items-center gap-1">
+                  <UserRound className="h-3 w-3" />
+                  {session.openedByName}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -239,7 +251,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
             <span className="num text-slate-300">{formatMoney(itemsAmount, currency)}</span>
           </div>
           <div className="flex items-end justify-between border-t border-slate-800 pt-1.5">
-            <span className="text-xs font-bold text-slate-200">Total estimado</span>
+            <span className="text-xs font-bold text-slate-200">Total actual</span>
             <span className="num text-lg font-black text-emerald-300">
               {formatMoney(total, currency)}
             </span>

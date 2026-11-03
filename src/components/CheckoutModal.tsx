@@ -249,10 +249,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
                       {table?.name}
                     </p>
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-slate-400">
                       <Clock3 className="h-3.5 w-3.5" />
-                      {formatClock(session.startTime)} → {formatClock(new Date(now))}
-                    </p>
+                      <span className="text-slate-500">Entrada</span>
+                      <span className="num text-slate-300">{formatClock(session.startTime)}</span>
+                      <span className="text-slate-600">→</span>
+                      <span className="text-slate-500">Salida</span>
+                      <span className="num text-slate-300">{formatClock(new Date(now))}</span>
+                    </div>
                   </div>
                   <div className="rounded-lg border border-slate-700 bg-slate-800/30 px-2.5 py-1 text-right">
                     <p className="num text-sm font-bold text-white">{liveCalculation.timer}</p>

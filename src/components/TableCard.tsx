@@ -1,5 +1,13 @@
 import React from 'react';
-import { ArrowRight, Clock3, CupSoda, Play, ReceiptText, Users } from 'lucide-react';
+import {
+  ArrowRight,
+  CupSoda,
+  LogIn,
+  LogOut,
+  Play,
+  ReceiptText,
+  UserRound,
+} from 'lucide-react';
 import type { Table } from '../types';
 import { calculateSession, cn, formatClock, formatMoney, sumItems } from '../lib/format';
 
@@ -25,9 +33,7 @@ export const TableCard: React.FC<TableCardProps> = ({
     ? calculateSession(session.startTime, session.ratePerHour, minimumCharge, nowMs)
     : null;
   const itemsAmount = session ? sumItems(session.items) : 0;
-  const itemsCount = session
-    ? session.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
-    : 0;
+  const total = (calculation?.cost ?? 0) + itemsAmount;
   const occupied = Boolean(session);
 
   return (
@@ -77,33 +83,66 @@ export const TableCard: React.FC<TableCardProps> = ({
                 {calculation.timer}
               </p>
               <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-500">
-                <Clock3 className="h-3 w-3" />
-                Entrada {formatClock(session.startTime)} · {session.openedByName}
+                <UserRound className="h-3 w-3" />
+                Abrió {session.openedByName}
               </p>
             </div>
-            <div className="text-right">
-              <p className="num text-sm font-bold text-emerald-300">
-                {formatMoney(calculation.cost, currency)}
-              </p>
-              <p className="text-[9px] text-slate-500">billar aprox.</p>
-            </div>
-          </div>
-
-          <div className="mt-2.5 flex w-full items-center justify-between gap-2 border-t border-slate-800/80 pt-2 text-[10px]">
-            <span className="flex items-center gap-1.5 text-slate-400">
-              <CupSoda className="h-3.5 w-3.5 text-sky-400/80" />
-              Consumo{' '}
-              <strong className="num text-slate-200">{formatMoney(itemsAmount, currency)}</strong>
-            </span>
-            <span className="flex items-center gap-1.5 text-slate-500">
-              <Users className="h-3.5 w-3.5" />
-              {itemsCount} ítem{itemsCount === 1 ? '' : 's'}
+            <span className="num rounded-md border border-slate-800 bg-[#08111d]/80 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400">
+              {formatMoney(session.ratePerHour, currency)}/h
             </span>
           </div>
 
-          <div className="mt-2 flex w-full items-center justify-end text-[10px] font-bold text-emerald-400 transition group-hover:text-emerald-300">
-            Abrir pedido
-            <ArrowRight className="ml-1 h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+          <div className="mt-2.5 grid w-full grid-cols-3 gap-2 rounded-lg border border-slate-800/80 bg-[#08111d]/70 px-2.5 py-2">
+            <div>
+              <p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">
+                <LogIn className="h-2.5 w-2.5 text-emerald-500/80" />
+                Entrada
+              </p>
+              <p className="num mt-0.5 text-[11px] font-bold text-slate-200">
+                {formatClock(session.startTime)}
+              </p>
+            </div>
+            <div
+              className="border-l border-slate-800/80 pl-2"
+              title="Hora de corte si cobras la mesa en este momento"
+            >
+              <p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">
+                <LogOut className="h-2.5 w-2.5 text-sky-400/80" />
+                Salida
+              </p>
+              <p className="num mt-0.5 text-[11px] font-bold text-sky-200">
+                {formatClock(new Date(nowMs))}
+              </p>
+            </div>
+            <div className="border-l border-slate-800/80 pl-2">
+              <p className="text-[8px] font-bold uppercase tracking-[0.13em] text-slate-500">
+                Total
+              </p>
+              <p className="num mt-0.5 truncate text-[12px] font-black text-emerald-300">
+                {formatMoney(total, currency)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 flex w-full items-center justify-between gap-2 text-[9px] text-slate-500">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <CupSoda className="h-3 w-3 shrink-0 text-sky-400/80" />
+              <span className="truncate">
+                Billar{' '}
+                <strong className="num font-semibold text-slate-300">
+                  {formatMoney(calculation.cost, currency)}
+                </strong>
+                <span className="px-1 text-slate-700">·</span>
+                Consumo{' '}
+                <strong className="num font-semibold text-slate-300">
+                  {formatMoney(itemsAmount, currency)}
+                </strong>
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center font-bold text-emerald-400 transition group-hover:text-emerald-300">
+              Abrir pedido
+              <ArrowRight className="ml-0.5 h-3 w-3 transition group-hover:translate-x-0.5" />
+            </span>
           </div>
         </>
       ) : (
