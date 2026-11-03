@@ -9,6 +9,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { APP_VERSION } from '../lib/version';
 import { PinPad } from './ui/PinPad';
 import { Logo } from './Logo';
 
@@ -155,7 +156,9 @@ export const LoginScreen: React.FC = () => {
                 <span className="status-dot" />
                 Servidor local
               </span>
-              <span className="num">v{authStatus.version}</span>
+              <span className="num" title="MVP en etapa de diseño">
+                v{APP_VERSION} · MVP
+              </span>
             </div>
           </div>
 

@@ -17,6 +17,7 @@ import { Logo } from './components/Logo';
 import { EmptyState } from './components/ui/EmptyState';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 import { formatMoney, formatClock } from './lib/format';
+import { APP_VERSION } from './lib/version';
 
 const LoadingScreen: React.FC = () => (
   <div className="flex min-h-screen flex-col items-center justify-center gap-5 px-4">
@@ -52,6 +53,13 @@ const ShiftFooter: React.FC = () => {
             {currentShift
               ? `Caja abierta · Turno #${currentShift.id} · ${formatClock(currentShift.openedAt)}`
               : 'Caja cerrada · Abre un turno para operar'}
+          </span>
+          <span
+            className="hidden shrink-0 items-center gap-1.5 text-slate-600 sm:flex"
+            title="Versión de presentación en etapa de diseño"
+          >
+            <span className="h-1 w-1 rounded-full bg-amber-400/70" />
+            MVP {APP_VERSION} · diseño
           </span>
         </div>
         <div className="flex items-center gap-4">

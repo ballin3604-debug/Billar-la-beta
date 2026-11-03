@@ -70,7 +70,7 @@ const DEFAULT_STATUS: AuthStatus = {
   ok: true,
   businessName: 'Billar & Bar',
   needsSetup: false,
-  version: '2.0.0',
+  version: '0.9.0',
 };
 
 function isTab(value: string | null): value is Tab {

@@ -13,6 +13,7 @@ import type { Tab } from '../types';
 import { cn, formatClock, formatDateShort, formatMoney, roleLabel } from '../lib/format';
 import { useNow } from '../lib/useNow';
 import { Logo } from './Logo';
+import { DesignStageBadge } from './DesignStageBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
 const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
@@ -152,6 +153,7 @@ export const Header: React.FC = () => {
             })}
 
             <div className="ml-auto hidden items-center gap-4 pl-4 text-[10px] lg:flex">
+              <DesignStageBadge />
               <span className="flex items-center gap-1.5 text-slate-500">
                 <WifiOff className="h-3.5 w-3.5" />
                 Modo local

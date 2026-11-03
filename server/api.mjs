@@ -193,7 +193,7 @@ export function createApiRouter() {
     res.json({
       ok: true,
       app: 'billar-caja',
-      version: '2.0.0',
+      version: '0.9.0',
       time: nowIso(),
     });
   });
@@ -206,7 +206,7 @@ export function createApiRouter() {
       ok: true,
       businessName: settings.businessName,
       needsSetup: count?.count === 1 && Boolean(firstUser?.must_change_pin),
-      version: '2.0.0',
+      version: '0.9.0',
     });
   });
 
