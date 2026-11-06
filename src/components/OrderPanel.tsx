@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Ban,
   LogIn,
   LogOut,
   Minus,
@@ -24,7 +23,6 @@ import {
 } from '../lib/format';
 import { useNow } from '../lib/useNow';
 import { ProductPicker } from './ui/ProductPicker';
-import { ReasonDialog } from './ui/ReasonDialog';
 
 interface OrderPanelProps {
   table: Table;
@@ -36,14 +34,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
   const {
     products,
     settings,
-    user,
     clockOffset,
     runAction,
   } = useApp();
   const now = useNow(clockOffset);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
   const session = table.activeSession;
   const currency = settings?.currency || 'Bs';
@@ -93,19 +88,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
       await runAction(() => api.removeItem(table.id, itemId));
     } finally {
       setBusyKey(null);
-    }
-  };
-
-  const cancelTable = async (reason: string) => {
-    setCancelling(true);
-    try {
-      const response = await runAction(() => api.cancelTable(table.id, reason));
-      if (response) {
-        setCancelOpen(false);
-        onClose();
-      }
-    } finally {
-      setCancelling(false);
     }
   };
 
@@ -273,35 +255,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
             <Receipt className="h-4 w-4" />
             Cobrar mesa
           </button>
-          {user?.role === 'admin' ? (
-            <button
-              type="button"
-              className="btn-ghost shrink-0 border border-slate-800 px-2.5 text-rose-400/80 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
-              onClick={() => setCancelOpen(true)}
-              disabled={Boolean(busyKey)}
-              title="Anular mesa"
-            >
-              <Ban className="h-4 w-4" />
-            </button>
-          ) : null}
         </div>
       </div>
-
-      <ReasonDialog
-        open={cancelOpen}
-        title={`Anular ${table.name}`}
-        description={
-          <span>
-            Se cerrará la mesa sin cobrar. Se devolverán al stock los productos cargados y la
-            partida quedará registrada en la auditoría.
-          </span>
-        }
-        confirmLabel="Anular mesa"
-        placeholder="Explica por qué se anula esta mesa…"
-        busy={cancelling}
-        onCancel={() => setCancelOpen(false)}
-        onConfirm={cancelTable}
-      />
     </div>
   );
 };
