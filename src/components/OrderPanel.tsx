@@ -2,11 +2,9 @@ import React, { useState } from 'react';
 import {
   LogIn,
   LogOut,
-  Minus,
   Plus,
   Receipt,
   ShoppingBag,
-  Trash2,
   UserRound,
   X,
 } from 'lucide-react';
@@ -15,7 +13,6 @@ import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
 import {
   calculateSession,
-  cn,
   formatClock,
   formatMoney,
   plural,
@@ -76,16 +73,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
     setBusyKey(`add-${productId}`);
     try {
       await runAction(() => api.addItem(table.id, productId, 1));
-    } finally {
-      setBusyKey(null);
-    }
-  };
-
-  const removeItem = async (itemId: number) => {
-    if (busyKey) return;
-    setBusyKey(`item-${itemId}`);
-    try {
-      await runAction(() => api.removeItem(table.id, itemId));
     } finally {
       setBusyKey(null);
     }
@@ -181,16 +168,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
                     {formatMoney(item.price, currency)} c/u
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 text-slate-400 transition hover:border-rose-500/50 hover:text-rose-300 disabled:opacity-40"
-                    onClick={() => removeItem(item.id)}
-                    disabled={Boolean(busyKey)}
-                    aria-label={`Quitar uno de ${item.name}`}
-                  >
-                    {item.quantity === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                  </button>
+                <div className="flex items-center gap-1.5">
                   <span className="num w-5 text-center text-xs font-bold text-white">
                     {item.quantity}
                   </span>
