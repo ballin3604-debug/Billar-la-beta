@@ -45,6 +45,7 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 - La salida se registra al confirmar el arqueo y cerrar la caja, no al cerrar sesión ni al bloquear la pantalla.
 - Se permiten varias jornadas en el mismo día si la anterior ya fue cerrada.
 - El dueño ve todos los registros en `Ajustes > Personal`; la API solo entrega a cada cajero sus propios registros.
+- El detalle del turno y la planilla imprimible muestran la entrada, la salida y la duración por persona; el cajero solo ve su propia jornada en esa vista.
 - Las jornadas sin salida quedan marcadas para revisión.
 
 ## Acceso directo

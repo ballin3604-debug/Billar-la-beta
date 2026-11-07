@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext';
 import {
   durationLabel,
   expenseCategoryLabel,
+  formatClock,
+  formatDateShort,
   formatDateTime,
   formatMoney,
   formatShiftRange,
@@ -18,6 +20,13 @@ interface ShiftReportProps {
 
 const thClass = 'border border-slate-300 bg-slate-100 px-1.5 py-1 text-left font-bold';
 const tdClass = 'border border-slate-300 px-1.5 py-1 align-top';
+
+const attendanceDuration = (checkInAt: string, checkOutAt: string) => {
+  const start = new Date(checkInAt).getTime();
+  const end = new Date(checkOutAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '—';
+  return durationLabel(Math.round((end - start) / 60000));
+};
 
 export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
   const { settings } = useApp();
@@ -64,6 +73,42 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
           <p>{formatDateTime(shift.closedAt)}</p>
         </div>
       </div>
+
+      {shift.attendance.length > 0 ? (
+        <div className="mt-4 print-break">
+          <h2 className="mb-1 text-[10px] font-black uppercase tracking-wider">
+            Entrada y salida del personal
+          </h2>
+          <table className="w-full border-collapse text-[9px]">
+            <thead>
+              <tr>
+                <th className={thClass}>Personal</th>
+                <th className={thClass}>Fecha</th>
+                <th className={thClass}>Entrada</th>
+                <th className={thClass}>Salida</th>
+                <th className={thClass}>Duración</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shift.attendance.map((entry) => (
+                <tr key={entry.id}>
+                  <td className={tdClass}>{entry.userName}</td>
+                  <td className={tdClass}>{formatDateShort(entry.date)}</td>
+                  <td className={tdClass}>{formatClock(entry.checkInAt)}</td>
+                  <td className={tdClass}>
+                    {entry.checkOutAt ? formatClock(entry.checkOutAt) : 'Sin salida'}
+                  </td>
+                  <td className={tdClass}>
+                    {entry.checkOutAt
+                      ? attendanceDuration(entry.checkInAt, entry.checkOutAt)
+                      : 'En curso'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div className="mt-4">
         <h2 className="mb-1 text-[10px] font-black uppercase tracking-wider">Resumen del turno</h2>

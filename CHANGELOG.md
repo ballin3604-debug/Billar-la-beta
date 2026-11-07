@@ -6,6 +6,7 @@
 - Registro de salida al confirmar el arqueo y cerrar la caja.
 - Nueva sección `Ajustes > Personal` con entradas, salidas, duración, búsqueda y filtro de jornadas sin salida.
 - Avisos de entrada/salida en Caja, en el cierre de turno y en el diálogo de caja cerrada.
+- La entrada, la salida y la duración de cada persona también aparecen en el detalle del turno y en la planilla imprimible.
 - Acceso directo `Billar & Bar` en el escritorio, con icono propio.
 - Lanzador `desktop\BillarBar.exe`: inicia el servidor local sin ventana si hace falta y abre el sistema en una ventana de aplicación sin barra de navegador.
 - `iniciar.bat` queda como método de respaldo y diagnóstico.

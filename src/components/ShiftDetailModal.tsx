@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Ban,
   ClipboardList,
+  Clock3,
   FileSpreadsheet,
   History,
   Loader2,
@@ -24,6 +25,7 @@ import {
   durationLabel,
   expenseCategoryLabel,
   formatClock,
+  formatDateShort,
   formatDateTime,
   formatMoney,
   formatShiftRange,
@@ -42,6 +44,13 @@ interface ShiftDetailModalProps {
 }
 
 type DetailTab = 'resumen' | 'partidas' | 'barra' | 'gastos' | 'auditoria';
+
+const attendanceDuration = (checkInAt: string, checkOutAt: string) => {
+  const start = new Date(checkInAt).getTime();
+  const end = new Date(checkOutAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '—';
+  return durationLabel(Math.round((end - start) / 60000));
+};
 
 const statusBadge = (status: 'open' | 'closed') =>
   status === 'open' ? (
@@ -306,6 +315,54 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                   Turno en curso. La caja todavía no tiene un cierre definitivo.
                 </div>
               )}
+
+              <div className="rounded-xl border border-slate-800 bg-[#08111d]">
+                <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
+                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Entrada y salida del personal
+                  </p>
+                </div>
+                {shift.attendance.length === 0 ? (
+                  <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">
+                    Sin registros de entrada y salida para este turno.
+                  </p>
+                ) : (
+                  <table className="data-table">
+                    <thead className="table-head">
+                      <tr>
+                        <th>Personal</th>
+                        <th>Fecha</th>
+                        <th>Entrada</th>
+                        <th>Salida</th>
+                        <th>Duración</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shift.attendance.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="font-medium text-slate-200">{entry.userName}</td>
+                          <td className="text-slate-400">{formatDateShort(entry.date)}</td>
+                          <td className="num text-sky-300">{formatClock(entry.checkInAt)}</td>
+                          <td
+                            className={cn(
+                              'num',
+                              entry.checkOutAt ? 'text-sky-300' : 'text-amber-300'
+                            )}
+                          >
+                            {entry.checkOutAt ? formatClock(entry.checkOutAt) : 'Sin salida'}
+                          </td>
+                          <td className="num">
+                            {entry.checkOutAt
+                              ? attendanceDuration(entry.checkInAt, entry.checkOutAt)
+                              : 'En curso'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-[#08111d]">

@@ -229,6 +229,7 @@ export interface ShiftDetail {
   qrPayments: QrPayment[];
   tableSummary: TableSummary[];
   productSummary: ProductSummaryRow[];
+  attendance: StaffAttendance[];
   closing: ClosingInfo | null;
   audit?: AuditEntry[];
 }

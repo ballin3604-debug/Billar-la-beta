@@ -660,6 +660,39 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
       })),
   ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+  const attendanceRows = viewer?.role === 'admin'
+    ? all(
+        `SELECT * FROM staff_attendance
+         WHERE shift_id = ? OR closed_shift_id = ?
+            OR id = (
+              SELECT sa.id FROM staff_attendance sa
+              WHERE sa.user_id = ? AND sa.check_out_at IS NULL AND sa.check_in_at <= ?
+              ORDER BY sa.check_in_at DESC, sa.id DESC LIMIT 1
+            )
+         ORDER BY check_in_at ASC, id ASC`,
+        shiftId,
+        shiftId,
+        shift.opened_by,
+        shift.opened_at
+      )
+    : all(
+        `SELECT * FROM staff_attendance
+         WHERE user_id = ?
+           AND (shift_id = ? OR closed_shift_id = ?
+                OR id = (
+                  SELECT sa.id FROM staff_attendance sa
+                  WHERE sa.user_id = ? AND sa.check_out_at IS NULL AND sa.check_in_at <= ?
+                  ORDER BY sa.check_in_at DESC, sa.id DESC LIMIT 1
+                ))
+         ORDER BY check_in_at ASC, id ASC`,
+        viewer?.id ?? 0,
+        shiftId,
+        shiftId,
+        viewer?.id ?? 0,
+        shift.opened_at
+      );
+  const attendance = attendanceRows.map(mapAttendance);
+
   const closed = shift.status === 'closed';
   const closing = closed
     ? {
@@ -704,6 +737,7 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
     qrPayments,
     tableSummary,
     productSummary,
+    attendance,
     closing,
     audit,
   };
