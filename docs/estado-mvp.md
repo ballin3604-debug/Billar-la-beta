@@ -46,6 +46,7 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 - Se permiten varias jornadas en el mismo día si la anterior ya fue cerrada.
 - El dueño ve todos los registros en `Ajustes > Personal`; la API solo entrega a cada cajero sus propios registros.
 - El detalle del turno y la planilla imprimible muestran la entrada, la salida y la duración por persona; el cajero solo ve su propia jornada en esa vista.
+- La sección Personal incluye una planilla imprimible con resumen por persona y detalle de entradas y salidas, exportable a PDF mediante el diálogo de impresión.
 - Las jornadas sin salida quedan marcadas para revisión.
 
 ## Acceso directo

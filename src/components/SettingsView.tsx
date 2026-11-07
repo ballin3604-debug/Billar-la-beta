@@ -15,6 +15,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -54,6 +55,7 @@ import {
 import { Modal } from './ui/Modal';
 import { EmptyState } from './ui/EmptyState';
 import { ChangePinModal } from './ChangePinModal';
+import { AttendanceReportModal } from './AttendanceReport';
 
 type Section = 'negocio' | 'mesas' | 'productos' | 'usuarios' | 'personal' | 'respaldos' | 'auditoria';
 
@@ -124,6 +126,7 @@ export const SettingsView: React.FC = () => {
   const [attendanceError, setAttendanceError] = useState<string | null>(null);
   const [attendanceQuery, setAttendanceQuery] = useState('');
   const [attendanceOnlyOpen, setAttendanceOnlyOpen] = useState(false);
+  const [attendanceReportOpen, setAttendanceReportOpen] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
@@ -306,6 +309,13 @@ export const SettingsView: React.FC = () => {
   const today = todayInputDate();
   const openAttendance = attendance.filter((entry) => !entry.checkOutAt);
   const todayAttendance = attendance.filter((entry) => entry.date === today);
+  const attendanceFilterLabel =
+    [
+      attendanceQuery.trim() ? `Búsqueda: “${attendanceQuery.trim()}”` : null,
+      attendanceOnlyOpen ? 'Solo jornadas sin salida' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || null;
 
   const sectionInfo = SECTIONS.find((item) => item.id === section);
 
@@ -870,15 +880,26 @@ export const SettingsView: React.FC = () => {
                       La entrada se registra al iniciar sesión; la salida, al cerrar caja.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-secondary px-2.5 py-1.5 text-[10px]"
-                    onClick={loadAttendance}
-                    disabled={attendanceLoading}
-                  >
-                    <RefreshCw className={cn('h-3.5 w-3.5', attendanceLoading && 'animate-spin')} />
-                    Actualizar
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary px-2.5 py-1.5 text-[10px]"
+                      onClick={() => setAttendanceReportOpen(true)}
+                      disabled={attendanceLoading || filteredAttendance.length === 0}
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      Imprimir / PDF
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary px-2.5 py-1.5 text-[10px]"
+                      onClick={loadAttendance}
+                      disabled={attendanceLoading}
+                    >
+                      <RefreshCw className={cn('h-3.5 w-3.5', attendanceLoading && 'animate-spin')} />
+                      Actualizar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 border-b border-slate-800/80 px-4 py-3">
@@ -1329,6 +1350,12 @@ export const SettingsView: React.FC = () => {
         onClose={() => setResetUser(null)}
       />
       <ChangePinModal open={changePinOpen} onClose={() => setChangePinOpen(false)} />
+      <AttendanceReportModal
+        open={attendanceReportOpen}
+        entries={filteredAttendance}
+        filterLabel={attendanceFilterLabel}
+        onClose={() => setAttendanceReportOpen(false)}
+      />
     </div>
   );
 };

@@ -66,6 +66,7 @@ La ventana usa el modo aplicación de Edge o Chrome: no muestra barra de direcci
 - Cerrar sesión o bloquear la pantalla no registra una salida.
 - El dueño puede consultar los registros en `Ajustes > Personal`, con búsqueda y filtro de jornadas sin salida.
 - El detalle de cada turno y la planilla imprimible incluyen una tabla con el personal, la fecha, la entrada, la salida y la duración. El dueño ve todas las jornadas vinculadas al turno; cada cajero solo ve la suya.
+- El botón **Imprimir / PDF** de `Ajustes > Personal` genera una planilla con el resumen por persona y el detalle de entradas y salidas; respeta la búsqueda y el filtro activos. En el diálogo de impresión se elige **Guardar como PDF**.
 - Si una jornada no tiene salida, queda marcada para revisión.
 
 ## Planilla de gastos
