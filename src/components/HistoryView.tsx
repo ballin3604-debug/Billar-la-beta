@@ -27,6 +27,7 @@ import { StatCard } from './ui/StatCard';
 import { EmptyState } from './ui/EmptyState';
 import { ShiftDetailModal } from './ShiftDetailModal';
 import { ShiftReportModal } from './ShiftReport';
+import { ExpenseReportModal } from './ExpenseReport';
 
 type StatusFilter = 'todos' | 'abiertos' | 'cerrados';
 
@@ -39,6 +40,7 @@ export const HistoryView: React.FC = () => {
   const [query, setQuery] = useState('');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [reportShift, setReportShift] = useState<ShiftDetail | null>(null);
+  const [expenseReportShift, setExpenseReportShift] = useState<ShiftDetail | null>(null);
   const [exporting, setExporting] = useState<'plays' | 'shifts' | null>(null);
 
   const currency = settings?.currency || 'Bs';
@@ -386,11 +388,20 @@ export const HistoryView: React.FC = () => {
           setDetailId(null);
           setReportShift(shift);
         }}
+        onPrintExpenses={(shift) => {
+          setDetailId(null);
+          setExpenseReportShift(shift);
+        }}
       />
       <ShiftReportModal
         open={Boolean(reportShift)}
         shift={reportShift}
         onClose={() => setReportShift(null)}
+      />
+      <ExpenseReportModal
+        open={Boolean(expenseReportShift)}
+        shift={expenseReportShift}
+        onClose={() => setExpenseReportShift(null)}
       />
     </div>
   );

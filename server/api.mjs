@@ -921,10 +921,52 @@ export function createApiRouter() {
 
   router.post('/expenses', authRequired, (req, res) => {
     const shift = requireOpenShift();
-    const amount = round2(numberField(req.body?.amount, 'El monto del gasto', { min: 0.01, max: 1000000 }));
     const concept = textField(req.body?.concept, 'El concepto', 2, 120);
     const category = String(req.body?.category ?? 'otro');
     if (!EXPENSE_CATEGORIES.has(category)) throw new HttpError(400, 'La categoría del gasto no es válida.');
+
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (rawItems.length > 50) {
+      throw new HttpError(400, 'El gasto admite hasta 50 productos.');
+    }
+    const items = rawItems.map((rawItem, index) => {
+      const position = index + 1;
+      const quantity = Math.floor(Number(rawItem?.quantity ?? 0));
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+        throw new HttpError(400, `La cantidad del producto #${position} no es válida.`);
+      }
+      const unitPrice = round2(
+        numberField(rawItem?.unitPrice, `El costo unitario del producto #${position}`, {
+          min: 0.01,
+          max: 1000000,
+        })
+      );
+      let productId = null;
+      let product = null;
+      if (rawItem?.productId !== null && rawItem?.productId !== undefined && rawItem?.productId !== '') {
+        productId = parsePositiveId(rawItem.productId, `producto del gasto #${position}`);
+        product = get('SELECT id, name FROM products WHERE id = ?', productId);
+        if (!product) {
+          throw new HttpError(400, `El producto #${position} no existe en el catálogo.`);
+        }
+      }
+      const name = textField(rawItem?.name ?? product?.name, `El nombre del producto #${position}`, 1, 80);
+      return {
+        productId,
+        name,
+        quantity,
+        unitPrice,
+        subtotal: round2(quantity * unitPrice),
+      };
+    });
+
+    const itemsTotal = round2(items.reduce((sum, item) => sum + item.subtotal, 0));
+    const amount = items.length > 0
+      ? itemsTotal
+      : round2(numberField(req.body?.amount, 'El monto del gasto', { min: 0.01, max: 1000000 }));
+    if (amount <= 0 || amount > 1000000) {
+      throw new HttpError(400, 'El monto del gasto no es válido.');
+    }
     const createdAt = nowIso();
 
     const expenseId = transaction(() => {
@@ -940,7 +982,19 @@ export function createApiRouter() {
         concept,
         category
       );
-      return Number(result.lastInsertRowid);
+      const id = Number(result.lastInsertRowid);
+      for (const item of items) {
+        run(
+          `INSERT INTO expense_items (expense_id, product_id, name, quantity, unit_price)
+           VALUES (?, ?, ?, ?, ?)`,
+          id,
+          item.productId,
+          item.name,
+          item.quantity,
+          item.unitPrice
+        );
+      }
+      return id;
     });
 
     logAudit({
@@ -949,7 +1003,12 @@ export function createApiRouter() {
       entityType: 'expense',
       entityId: expenseId,
       shiftId: shift.id,
-      details: { amount, concept, category },
+      details: {
+        amount,
+        concept,
+        category,
+        items: items.map((item) => `${item.quantity}x ${item.name}`).join(', ') || undefined,
+      },
       ip: req.ipAddress,
     });
 

@@ -11,7 +11,8 @@ Sistema local de caja, mesas y control de consumo para billar y bar. Funciona si
 - **Mesas en vivo:** cronómetro, entrada, salida (corte actual), billar, consumo y total por mesa.
 - **Consumos por mesa:** productos de barra, cantidades y control de stock.
 - **Cobros:** efectivo, QR y pago mixto, con comprobante para imprimir.
-- **Caja diaria:** apertura de turno, fondo inicial, gastos, ventas y cierre con arqueo.
+- **Caja diaria:** apertura de turno, fondo inicial, gastos —con detalle de productos comprados—, ventas y cierre con arqueo.
+- **Planillas:** planilla completa del turno y planilla específica de gastos, ambas imprimibles.
 - **Historial:** turnos cerrados, partidas, ventas, gastos, diferencias y auditoría.
 - **Personal:** registro automático de entrada al iniciar sesión y de salida al cerrar caja, con duración y filtros para el dueño.
 - **Administración:** mesas, tarifas, productos, usuarios, respaldos y exportaciones CSV.
@@ -66,6 +67,14 @@ La ventana usa el modo aplicación de Edge o Chrome: no muestra barra de direcci
 - El dueño puede consultar los registros en `Ajustes > Personal`, con búsqueda y filtro de jornadas sin salida.
 - Si una jornada no tiene salida, queda marcada para revisión.
 
+## Planilla de gastos
+
+- Cada gasto puede incluir los productos comprados con cantidad y costo unitario; el total se calcula automáticamente.
+- La planilla de gastos muestra el resumen por categoría, el detalle de cada gasto, los productos comprados y los gastos anulados.
+- Se abre desde el botón **Planilla de gastos** en Caja o desde el detalle de un turno en Historial.
+- El detalle de productos también aparece en las tablas de gastos y en la planilla completa del turno.
+- Registrar productos en un gasto no modifica el stock del catálogo: el ajuste de inventario se hace por separado.
+
 ## Datos y respaldos
 
 - La base de datos local vive en `data/billar.db`.
@@ -92,6 +101,7 @@ public/         Recursos estáticos
 | Consumos y barra | Operativo |
 | Cobros y comprobantes | Operativo |
 | Cierre de caja y arqueo | Operativo |
+| Planilla de gastos con productos | Operativo |
 | Entradas y salidas del personal | Operativo |
 | Acceso directo de escritorio | Operativo |
 | Historial y auditoría | Operativo |

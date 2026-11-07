@@ -311,6 +311,15 @@ function createSchema() {
       void_reason TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS expense_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_id INTEGER NOT NULL REFERENCES expenses(id),
+      product_id INTEGER REFERENCES products(id),
+      name TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit_price REAL NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
@@ -335,6 +344,7 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_plays_table ON plays(table_id);
     CREATE INDEX IF NOT EXISTS idx_sales_shift ON sales(shift_id);
     CREATE INDEX IF NOT EXISTS idx_expenses_shift ON expenses(shift_id);
+    CREATE INDEX IF NOT EXISTS idx_expense_items_expense ON expense_items(expense_id);
     CREATE INDEX IF NOT EXISTS idx_session_items_session ON session_items(session_id);
     CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
     CREATE INDEX IF NOT EXISTS idx_audit_shift ON audit_log(shift_id);

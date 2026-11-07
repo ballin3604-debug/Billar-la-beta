@@ -5,6 +5,7 @@ import {
   CircleDollarSign,
   Clock3,
   CupSoda,
+  FileSpreadsheet,
   History,
   LockKeyhole,
   LogIn,
@@ -36,6 +37,7 @@ import { useNow } from '../lib/useNow';
 import { StatCard } from './ui/StatCard';
 import { EmptyState } from './ui/EmptyState';
 import { ExpenseModal } from './ExpenseModal';
+import { ExpenseReportModal } from './ExpenseReport';
 import { CloseShiftModal } from './CloseShiftModal';
 import { ShiftReportModal } from './ShiftReport';
 import { BarSaleModal } from './BarSaleModal';
@@ -96,6 +98,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
   const now = useNow(clockOffset);
   const [movementTab, setMovementTab] = useState<MovementTab>('partidas');
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [expenseReportOpen, setExpenseReportOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [barOpen, setBarOpen] = useState(false);
@@ -206,6 +209,14 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
           <button type="button" className="btn-secondary" onClick={() => setReportOpen(true)}>
             <Printer className="h-4 w-4" />
             Planilla
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setExpenseReportOpen(true)}
+          >
+            <FileSpreadsheet className="h-4 w-4 text-rose-400" />
+            Planilla de gastos
           </button>
           <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
             <CupSoda className="h-4 w-4 text-sky-400" />
@@ -457,73 +468,97 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             ) : null}
 
             {movementTab === 'gastos' ? (
-              shift.expenses.length === 0 ? (
-                <EmptyState
-                  title="Sin gastos registrados"
-                  description="Los gastos de caja reducen el efectivo esperado del turno."
-                  icon={<TrendingDown className="h-6 w-6" />}
-                  className="m-4"
-                />
-              ) : (
-                <table className="data-table min-w-[620px]">
-                  <thead className="table-head">
-                    <tr>
-                      <th>Hora / cajero</th>
-                      <th>Concepto</th>
-                      <th>Categoría</th>
-                      <th>Monto</th>
-                      <th>Estado</th>
-                      <th className="text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...shift.expenses].reverse().map((expense) => (
-                      <tr key={expense.id} className={expense.status === 'voided' ? 'opacity-55' : ''}>
-                        <td>
-                          <p className="num text-slate-200">{formatClock(expense.createdAt)}</p>
-                          <p className="text-[10px] text-slate-500">{expense.createdByName}</p>
-                        </td>
-                        <td className="font-medium text-slate-200">{expense.concept}</td>
-                        <td className="text-slate-400">
-                          {expenseCategoryLabel(expense.category as ExpenseCategory)}
-                        </td>
-                        <td className="num font-bold text-rose-300">
-                          {formatMoney(expense.amount, currency)}
-                        </td>
-                        <td>
-                          {expense.status === 'voided' ? statusBadge('voided') : statusBadge('active', 'Vigente')}
-                          {expense.status === 'voided' && expense.voidReason ? (
-                            <p className="mt-1 max-w-[120px] truncate text-[9px] text-rose-300/70" title={expense.voidReason}>
-                              {expense.voidReason}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="text-right">
-                          {isAdmin && expense.status === 'active' ? (
-                            <button
-                              type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
-                              title="Anular gasto"
-                              onClick={() =>
-                                setVoidTarget({
-                                  kind: 'expense',
-                                  id: expense.id,
-                                  label: `Gasto: ${expense.concept}`,
-                                  amount: expense.amount,
-                                })
-                              }
-                            >
-                              <Ban className="h-3.5 w-3.5" />
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-700">—</span>
-                          )}
-                        </td>
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 px-3.5 py-2.5">
+                  <p className="text-[10px] text-slate-500">
+                    Detalle de gastos y productos comprados del turno.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-ghost border border-slate-800 px-2 py-1 text-[10px]"
+                    onClick={() => setExpenseReportOpen(true)}
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    Planilla de gastos
+                  </button>
+                </div>
+                {shift.expenses.length === 0 ? (
+                  <EmptyState
+                    title="Sin gastos registrados"
+                    description="Los gastos de caja reducen el efectivo esperado del turno."
+                    icon={<TrendingDown className="h-6 w-6" />}
+                    className="m-4"
+                  />
+                ) : (
+                  <table className="data-table min-w-[620px]">
+                    <thead className="table-head">
+                      <tr>
+                        <th>Hora / cajero</th>
+                        <th>Concepto y productos</th>
+                        <th>Categoría</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                        <th className="text-right">Acción</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )
+                    </thead>
+                    <tbody>
+                      {[...shift.expenses].reverse().map((expense) => (
+                        <tr key={expense.id} className={expense.status === 'voided' ? 'opacity-55' : ''}>
+                          <td>
+                            <p className="num text-slate-200">{formatClock(expense.createdAt)}</p>
+                            <p className="text-[10px] text-slate-500">{expense.createdByName}</p>
+                          </td>
+                          <td>
+                            <p className="font-medium text-slate-200">{expense.concept}</p>
+                            {expense.items.length > 0 ? (
+                              <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
+                                {expense.items
+                                  .map((item) => `${item.quantity}× ${item.name}`)
+                                  .join(' · ')}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="text-slate-400">
+                            {expenseCategoryLabel(expense.category as ExpenseCategory)}
+                          </td>
+                          <td className="num font-bold text-rose-300">
+                            {formatMoney(expense.amount, currency)}
+                          </td>
+                          <td>
+                            {expense.status === 'voided' ? statusBadge('voided') : statusBadge('active', 'Vigente')}
+                            {expense.status === 'voided' && expense.voidReason ? (
+                              <p className="mt-1 max-w-[120px] truncate text-[9px] text-rose-300/70" title={expense.voidReason}>
+                                {expense.voidReason}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="text-right">
+                            {isAdmin && expense.status === 'active' ? (
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+                                title="Anular gasto"
+                                onClick={() =>
+                                  setVoidTarget({
+                                    kind: 'expense',
+                                    id: expense.id,
+                                    label: `Gasto: ${expense.concept}`,
+                                    amount: expense.amount,
+                                  })
+                                }
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-700">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             ) : null}
 
             {movementTab === 'qr' ? (
@@ -738,6 +773,11 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
         onShiftClosed={onShiftClosed}
       />
       <ShiftReportModal open={reportOpen} shift={shift} onClose={() => setReportOpen(false)} />
+      <ExpenseReportModal
+        open={expenseReportOpen}
+        shift={shift}
+        onClose={() => setExpenseReportOpen(false)}
+      />
       <ReasonDialog
         open={Boolean(voidTarget)}
         title={voidTitle}

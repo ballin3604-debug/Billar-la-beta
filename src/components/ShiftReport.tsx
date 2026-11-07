@@ -253,6 +253,7 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
               <tr>
                 <th className={thClass}>Hora</th>
                 <th className={thClass}>Concepto</th>
+                <th className={thClass}>Productos comprados</th>
                 <th className={thClass}>Categoría</th>
                 <th className={thClass}>Monto</th>
                 <th className={thClass}>Estado</th>
@@ -263,6 +264,16 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                 <tr key={expense.id}>
                   <td className={tdClass}>{formatDateTime(expense.createdAt)}</td>
                   <td className={tdClass}>{expense.concept}</td>
+                  <td className={tdClass}>
+                    {expense.items.length === 0
+                      ? '—'
+                      : expense.items
+                          .map(
+                            (item) =>
+                              `${item.quantity}× ${item.name} (${formatMoney(item.unitPrice, currency)} c/u)`
+                          )
+                          .join(', ')}
+                  </td>
                   <td className={tdClass}>{expenseCategoryLabel(expense.category)}</td>
                   <td className={`${tdClass} font-bold`}>{formatMoney(expense.amount, currency)}</td>
                   <td className={tdClass}>

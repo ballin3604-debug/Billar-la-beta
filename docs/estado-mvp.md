@@ -18,6 +18,7 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 - Cobros en efectivo, QR y pago mixto.
 - Comprobantes y planillas para imprimir.
 - Gastos, cierre de caja y arqueo con diferencia.
+- Planilla de gastos con detalle de productos comprados, resumen por categoría y gastos anulados.
 - Registro automático de entrada del personal al iniciar sesión y de salida al cerrar caja.
 - Historial de turnos, partidas, ventas y auditoría.
 - Administración de mesas, productos, usuarios, personal y respaldos.

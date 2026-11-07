@@ -356,7 +356,7 @@ function mapSale(row, items = []) {
   };
 }
 
-function mapExpense(row) {
+function mapExpense(row, items = []) {
   return {
     id: row.id,
     shiftId: row.shift_id,
@@ -369,6 +369,7 @@ function mapExpense(row) {
     voidedByName: row.voided_by_name,
     voidedAt: row.voided_at,
     voidReason: row.void_reason,
+    items,
   };
 }
 
@@ -498,10 +499,33 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
     mapSale(row, saleItemsBySale.get(row.id) || [])
   );
 
-  const expenses = all(
+  const expenseRows = all(
     'SELECT * FROM expenses WHERE shift_id = ? ORDER BY created_at ASC, id ASC',
     shiftId
-  ).map(mapExpense);
+  );
+  const expenseItemRows = all(
+    `SELECT ei.*
+     FROM expense_items ei
+     JOIN expenses e ON e.id = ei.expense_id
+     WHERE e.shift_id = ?
+     ORDER BY ei.id ASC`,
+    shiftId
+  );
+  const expenseItemsByExpense = new Map();
+  for (const row of expenseItemRows) {
+    if (!expenseItemsByExpense.has(row.expense_id)) expenseItemsByExpense.set(row.expense_id, []);
+    expenseItemsByExpense.get(row.expense_id).push({
+      id: row.id,
+      productId: row.product_id,
+      name: row.name,
+      quantity: row.quantity,
+      unitPrice: row.unit_price,
+      subtotal: round2(Number(row.quantity || 0) * Number(row.unit_price || 0)),
+    });
+  }
+  const expenses = expenseRows.map((row) =>
+    mapExpense(row, expenseItemsByExpense.get(row.id) || [])
+  );
 
   const activePlays = plays.filter((play) => play.status === 'active');
   const activeSales = sales.filter((sale) => sale.status === 'active');

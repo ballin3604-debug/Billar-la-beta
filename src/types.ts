@@ -131,6 +131,15 @@ export interface Sale {
   items: SaleItem[];
 }
 
+export interface ExpenseItem {
+  id: number;
+  productId: number | null;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
 export interface Expense {
   id: number;
   shiftId: number;
@@ -143,6 +152,7 @@ export interface Expense {
   voidedByName: string | null;
   voidedAt: string | null;
   voidReason: string | null;
+  items: ExpenseItem[];
 }
 
 export interface QrPayment {

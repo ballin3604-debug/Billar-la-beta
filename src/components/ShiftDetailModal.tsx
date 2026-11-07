@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Ban,
   ClipboardList,
+  FileSpreadsheet,
   History,
   Loader2,
   Printer,
@@ -37,6 +38,7 @@ interface ShiftDetailModalProps {
   shiftId: number | null;
   onClose: () => void;
   onPrint: (shift: ShiftDetail) => void;
+  onPrintExpenses: (shift: ShiftDetail) => void;
 }
 
 type DetailTab = 'resumen' | 'partidas' | 'barra' | 'gastos' | 'auditoria';
@@ -57,6 +59,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
   shiftId,
   onClose,
   onPrint,
+  onPrintExpenses,
 }) => {
   const { settings, user } = useApp();
   const [shift, setShift] = useState<ShiftDetail | null>(null);
@@ -112,6 +115,17 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>
             Cerrar
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!shift}
+            onClick={() => {
+              if (shift) onPrintExpenses(shift);
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4 text-rose-400" />
+            Planilla de gastos
           </button>
           <button
             type="button"
@@ -529,47 +543,71 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
           ) : null}
 
           {tab === 'gastos' ? (
-            shift.expenses.length === 0 ? (
-              <EmptyState title="Sin gastos" icon={<TrendingDown className="h-6 w-6" />} />
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="data-table min-w-[520px]">
-                  <thead className="table-head">
-                    <tr>
-                      <th>Hora / cajero</th>
-                      <th>Concepto</th>
-                      <th>Categoría</th>
-                      <th>Monto</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {shift.expenses.map((expense) => (
-                      <tr key={expense.id} className={expense.status === 'voided' ? 'opacity-55' : ''}>
-                        <td>
-                          <p className="num text-slate-200">{formatClock(expense.createdAt)}</p>
-                          <p className="text-[10px] text-slate-500">{expense.createdByName}</p>
-                        </td>
-                        <td className="text-slate-200">{expense.concept}</td>
-                        <td>{expenseCategoryLabel(expense.category)}</td>
-                        <td className="num font-bold text-rose-300">
-                          {formatMoney(expense.amount, currency)}
-                        </td>
-                        <td>
-                          {expense.status === 'voided' ? (
-                            <span className="text-[9px] font-bold text-rose-300">
-                              Anulado{expense.voidReason ? `: ${expense.voidReason}` : ''}
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold text-emerald-300">Activo</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-[#08111d] px-3.5 py-2.5">
+                <p className="text-[10px] text-slate-500">
+                  Gastos con detalle de los productos comprados.
+                </p>
+                <button
+                  type="button"
+                  className="btn-ghost border border-slate-800 px-2 py-1 text-[10px]"
+                  onClick={() => onPrintExpenses(shift)}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Planilla de gastos
+                </button>
               </div>
-            )
+              {shift.expenses.length === 0 ? (
+                <EmptyState title="Sin gastos" icon={<TrendingDown className="h-6 w-6" />} />
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="data-table min-w-[520px]">
+                    <thead className="table-head">
+                      <tr>
+                        <th>Hora / cajero</th>
+                        <th>Concepto y productos</th>
+                        <th>Categoría</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shift.expenses.map((expense) => (
+                        <tr key={expense.id} className={expense.status === 'voided' ? 'opacity-55' : ''}>
+                          <td>
+                            <p className="num text-slate-200">{formatClock(expense.createdAt)}</p>
+                            <p className="text-[10px] text-slate-500">{expense.createdByName}</p>
+                          </td>
+                          <td>
+                            <p className="text-slate-200">{expense.concept}</p>
+                            {expense.items.length > 0 ? (
+                              <p className="mt-0.5 text-[9px] leading-relaxed text-slate-500">
+                                {expense.items
+                                  .map((item) => `${item.quantity}× ${item.name}`)
+                                  .join(' · ')}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td>{expenseCategoryLabel(expense.category)}</td>
+                          <td className="num font-bold text-rose-300">
+                            {formatMoney(expense.amount, currency)}
+                          </td>
+                          <td>
+                            {expense.status === 'voided' ? (
+                              <span className="text-[9px] font-bold text-rose-300">
+                                Anulado{expense.voidReason ? `: ${expense.voidReason}` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-emerald-300">Activo</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           ) : null}
 
           {tab === 'auditoria' && isAdmin ? (

@@ -180,8 +180,17 @@ export const api = {
   }) =>
     request<MutationResponse>('/sales', { method: 'POST', body: payload }),
 
-  addExpense: (payload: { amount: number; concept: string; category: string }) =>
-    request<MutationResponse>('/expenses', { method: 'POST', body: payload }),
+  addExpense: (payload: {
+    amount?: number;
+    concept: string;
+    category: string;
+    items?: Array<{
+      productId: number | null;
+      name: string;
+      quantity: number;
+      unitPrice: number;
+    }>;
+  }) => request<MutationResponse>('/expenses', { method: 'POST', body: payload }),
 
   voidPlay: (id: number, reason: string) =>
     request<MutationResponse>(`/plays/${id}/void`, { method: 'POST', body: { reason } }),
