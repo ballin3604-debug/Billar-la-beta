@@ -1,7 +1,13 @@
 # Historial de cambios
 
-## Sin publicar — Asistencia, acceso directo y planilla de gastos
+## Sin publicar — Asistencia, permisos de cajero y planillas
 
+- Nuevo alcance restringido para cajeros: solo ven y operan `Mesas`, `Egresos` y `Cierre`.
+- La API exige rol de administrador para historial, asistencia global, detalle de turnos, apertura de caja, ventas de barra y anulaciones.
+- El cajero recibe una vista sanitizada del turno: solo sus propios egresos y su propia asistencia; no ve ventas, partidas, pagos QR, resúmenes, arqueo ni auditoría.
+- Cierre de caja del cajero con arqueo ciego y sin exigir observaciones por diferencia; el administrador conserva el detalle completo y la exigencia de explicar diferencias.
+- La venta rápida de barra y la apertura de caja quedan reservadas al administrador; el cajero ve un aviso de espera si la caja está cerrada.
+- Nuevas pestañas `Egresos` y `Cierre` para cajeros, con listado de egresos propios y confirmación de salida sin totales.
 - Registro automático de entrada del personal al iniciar sesión con PIN.
 - Registro de salida al confirmar el arqueo y cerrar la caja.
 - Nueva sección `Ajustes > Personal` con entradas, salidas, duración, búsqueda y filtro de jornadas sin salida.

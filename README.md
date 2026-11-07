@@ -69,6 +69,15 @@ La ventana usa el modo aplicación de Edge o Chrome: no muestra barra de direcci
 - El botón **Imprimir / PDF** de `Ajustes > Personal` genera una planilla con el resumen por persona y el detalle de entradas y salidas; respeta la búsqueda y el filtro activos. En el diálogo de impresión se elige **Guardar como PDF**.
 - Si una jornada no tiene salida, queda marcada para revisión.
 
+## Roles y permisos
+
+- **Administrador (dueño):** acceso completo a mesas, caja, venta rápida de barra, historial, ajustes, anulaciones, asistencia de todo el personal, reportes y planillas.
+- **Cajero:** solo ve las pestañas `Mesas`, `Egresos` y `Cierre`. Puede iniciar y cobrar mesas, registrar sus propios egresos y cerrar la caja con arqueo ciego.
+- El cajero no puede abrir la caja ni vender en barra; si la caja está cerrada, ve un aviso para esperar al administrador.
+- El cajero no ve totales del turno, ventas, pagos QR, historial, asistencia de otras personas, planillas, ajustes ni anulaciones.
+- Sus egresos y su asistencia se limitan a los registros propios. El administrador conserva el detalle completo de cada turno.
+- Las restricciones se aplican en la API, no solo ocultando botones en la interfaz.
+
 ## Planilla de gastos
 
 - Cada gasto puede incluir los productos comprados con cantidad y costo unitario; el total se calcula automáticamente.
@@ -87,7 +96,7 @@ La ventana usa el modo aplicación de Edge o Chrome: no muestra barra de direcci
 ## Estructura
 
 ```text
-src/            Interfaz React (mesas, caja, historial, ajustes)
+src/            Interfaz React (mesas, caja, egresos, cierre, historial, ajustes)
 server/         API local con Express y SQLite
 desktop/        Código, icono y script del acceso directo de Windows
 data/           Base de datos y respaldos (no versionado)

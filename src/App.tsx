@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
-import type { ShiftDetail } from './types';
+import type { ShiftDetail, Tab } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { LockScreen } from './components/LockScreen';
 import { Header } from './components/Header';
@@ -8,6 +8,8 @@ import { TablesView } from './components/TablesView';
 import { CashView } from './components/CashView';
 import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
+import { CashierExpensesView } from './components/CashierExpensesView';
+import { CashierCloseView } from './components/CashierCloseView';
 import { OpenShiftScreen } from './components/OpenShiftScreen';
 import { ShiftClosedDialog } from './components/ShiftClosedDialog';
 import { ChangePinModal } from './components/ChangePinModal';
@@ -39,6 +41,7 @@ const ShiftFooter: React.FC = () => {
   const { currentShift, settings, user, tables } = useApp();
   const occupied = tables.filter((table) => table.status === 'occupied').length;
   const currency = settings?.currency || 'Bs';
+  const isAdmin = user?.role === 'admin';
 
   return (
     <footer className="no-print border-t border-slate-800/80 bg-[#070d16]/95">
@@ -52,7 +55,9 @@ const ShiftFooter: React.FC = () => {
           <span className="truncate">
             {currentShift
               ? `Caja abierta · Turno #${currentShift.id} · ${formatClock(currentShift.openedAt)}`
-              : 'Caja cerrada · Abre un turno para operar'}
+              : isAdmin
+              ? 'Caja cerrada · Abre un turno para operar'
+              : 'Caja cerrada · El administrador debe abrirla'}
           </span>
           <span
             className="hidden shrink-0 items-center gap-1.5 text-slate-600 sm:flex"
@@ -66,7 +71,7 @@ const ShiftFooter: React.FC = () => {
           <span className="hidden sm:inline">
             Mesas: <strong className="text-slate-300">{occupied}</strong>
           </span>
-          {currentShift ? (
+          {isAdmin && currentShift ? (
             <>
               <span>
                 Ventas:{' '}
@@ -80,7 +85,7 @@ const ShiftFooter: React.FC = () => {
                   {formatMoney(currentShift.totals.totalQr, currency)}
                 </strong>
               </span>
-              {user?.role === 'admin' && currentShift.totals.expectedCash !== undefined ? (
+              {currentShift.totals.expectedCash !== undefined ? (
                 <span className="rounded border border-emerald-500/20 bg-emerald-500/[0.06] px-1.5 py-0.5 text-emerald-300">
                   Efectivo:{' '}
                   <strong className="num">
@@ -101,27 +106,45 @@ const AppShell: React.FC = () => {
   const [closedShift, setClosedShift] = useState<ShiftDetail | null>(null);
   const [changePinOpen, setChangePinOpen] = useState(false);
 
+  const isAdmin = user?.role === 'admin';
+  const allowedTabs: Tab[] = isAdmin
+    ? ['mesas', 'caja', 'historial', 'ajustes']
+    : ['mesas', 'egresos', 'cierre'];
+  const activeTab = allowedTabs.includes(tab) ? tab : 'mesas';
+
   useEffect(() => {
-    if (user?.role !== 'admin' && tab === 'ajustes') setTab('mesas');
-  }, [setTab, tab, user?.role]);
+    if (!user) return;
+    const allowed = user.role === 'admin'
+      ? ['mesas', 'caja', 'historial', 'ajustes']
+      : ['mesas', 'egresos', 'cierre'];
+    if (!allowed.includes(tab)) setTab('mesas');
+  }, [setTab, tab, user]);
 
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
 
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-3 py-4 sm:px-5">
-        {tab === 'mesas' ? (
+        {activeTab === 'mesas' ? (
           currentShift ? <TablesView /> : <OpenShiftScreen />
-        ) : tab === 'caja' ? (
+        ) : activeTab === 'caja' ? (
           currentShift ? (
             <CashView onShiftClosed={(shift) => setClosedShift(shift)} />
           ) : (
             <OpenShiftScreen />
           )
-        ) : tab === 'historial' ? (
+        ) : activeTab === 'egresos' ? (
+          currentShift ? <CashierExpensesView /> : <OpenShiftScreen />
+        ) : activeTab === 'cierre' ? (
+          currentShift ? (
+            <CashierCloseView onShiftClosed={(shift) => setClosedShift(shift)} />
+          ) : (
+            <OpenShiftScreen />
+          )
+        ) : activeTab === 'historial' ? (
           <HistoryView />
-        ) : tab === 'ajustes' ? (
-          user?.role === 'admin' ? (
+        ) : activeTab === 'ajustes' ? (
+          isAdmin ? (
             <SettingsView />
           ) : (
             <EmptyState
@@ -148,7 +171,10 @@ const AppShell: React.FC = () => {
 
       <ShiftClosedDialog
         shift={closedShift}
-        onClose={() => setClosedShift(null)}
+        onClose={() => {
+          setClosedShift(null);
+          if (!isAdmin) setTab('mesas');
+        }}
         onViewHistory={() => {
           setClosedShift(null);
           setTab('historial');

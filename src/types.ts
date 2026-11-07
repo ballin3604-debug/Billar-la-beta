@@ -1,5 +1,5 @@
 export type Role = 'admin' | 'cashier';
-export type Tab = 'mesas' | 'caja' | 'historial' | 'ajustes';
+export type Tab = 'mesas' | 'caja' | 'historial' | 'ajustes' | 'egresos' | 'cierre';
 export type PaymentMethod = 'efectivo' | 'qr' | 'mixto';
 export type ExpenseCategory = 'comida' | 'personal' | 'compras' | 'servicios' | 'otro';
 export type ProductCategory = 'cervezas' | 'bebidas' | 'snacks' | 'multas' | 'otros';

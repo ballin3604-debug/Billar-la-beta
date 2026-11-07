@@ -111,6 +111,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
     [tables]
   );
 
+  if (user?.role !== 'admin') return null;
   if (!currentShift) return null;
 
   const shift = currentShift;

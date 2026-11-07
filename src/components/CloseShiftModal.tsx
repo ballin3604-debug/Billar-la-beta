@@ -218,7 +218,8 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               <strong>Arqueo ciego:</strong> el sistema no muestra el efectivo esperado. Cuenta
-              toda la gaveta con calma e ingresa el total. La diferencia se registrará al cerrar.
+              toda la gaveta con calma e ingresa el total. El administrador revisará el arqueo al
+              cerrar.
             </span>
           </div>
         )}

@@ -3,7 +3,9 @@ import {
   History,
   LayoutGrid,
   Lock,
+  LockKeyhole,
   LogOut,
+  ReceiptText,
   Settings,
   Wallet,
   WifiOff,
@@ -16,10 +18,28 @@ import { Logo } from './Logo';
 import { DesignStageBadge } from './DesignStageBadge';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 
-const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode; adminOnly?: boolean }> = [
+const TABS: Array<{
+  id: Tab;
+  label: string;
+  icon: React.ReactNode;
+  adminOnly?: boolean;
+  cashierOnly?: boolean;
+}> = [
   { id: 'mesas', label: 'Mesas', icon: <LayoutGrid className="h-4 w-4" /> },
-  { id: 'caja', label: 'Caja', icon: <Wallet className="h-4 w-4" /> },
-  { id: 'historial', label: 'Historial', icon: <History className="h-4 w-4" /> },
+  { id: 'caja', label: 'Caja', icon: <Wallet className="h-4 w-4" />, adminOnly: true },
+  { id: 'historial', label: 'Historial', icon: <History className="h-4 w-4" />, adminOnly: true },
+  {
+    id: 'egresos',
+    label: 'Egresos',
+    icon: <ReceiptText className="h-4 w-4" />,
+    cashierOnly: true,
+  },
+  {
+    id: 'cierre',
+    label: 'Cierre',
+    icon: <LockKeyhole className="h-4 w-4" />,
+    cashierOnly: true,
+  },
   { id: 'ajustes', label: 'Ajustes', icon: <Settings className="h-4 w-4" />, adminOnly: true },
 ];
 
@@ -41,7 +61,11 @@ export const Header: React.FC = () => {
   const [leaving, setLeaving] = useState(false);
 
   const occupied = tables.filter((table) => table.status === 'occupied').length;
-  const visibleTabs = TABS.filter((item) => !item.adminOnly || user?.role === 'admin');
+  const visibleTabs = TABS.filter((item) => {
+    if (item.adminOnly && user?.role !== 'admin') return false;
+    if (item.cashierOnly && user?.role !== 'cashier') return false;
+    return true;
+  });
 
   return (
     <>
@@ -84,7 +108,9 @@ export const Header: React.FC = () => {
                   <p className="num text-[9px] text-slate-500">
                     {currentShift
                       ? `Desde ${formatClock(currentShift.openedAt)} · ${occupied} mesa${occupied === 1 ? '' : 's'}`
-                      : 'Abre un turno para operar'}
+                      : user?.role === 'admin'
+                      ? 'Abre un turno para operar'
+                      : 'El administrador debe abrir la caja'}
                   </p>
                 </div>
               </div>
@@ -166,7 +192,7 @@ export const Header: React.FC = () => {
                 <WifiOff className="h-3.5 w-3.5" />
                 Modo local
               </span>
-              {currentShift ? (
+              {currentShift && user?.role === 'admin' ? (
                 <span className="text-slate-400">
                   Ventas:{' '}
                   <strong className="num text-slate-200">

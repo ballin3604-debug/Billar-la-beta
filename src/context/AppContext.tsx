@@ -76,8 +76,18 @@ const DEFAULT_STATUS: AuthStatus = {
 };
 
 function isTab(value: string | null): value is Tab {
-  return value === 'mesas' || value === 'caja' || value === 'historial' || value === 'ajustes';
+  return (
+    value === 'mesas' ||
+    value === 'caja' ||
+    value === 'historial' ||
+    value === 'ajustes' ||
+    value === 'egresos' ||
+    value === 'cierre'
+  );
 }
+
+const ADMIN_TABS: Tab[] = ['mesas', 'caja', 'historial', 'ajustes'];
+const CASHIER_TABS: Tab[] = ['mesas', 'egresos', 'cierre'];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -115,6 +125,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTabState(nextTab);
     sessionStorage.setItem('billar_tab', nextTab);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const allowed = user.role === 'admin' ? ADMIN_TABS : CASHIER_TABS;
+    if (!allowed.includes(tab)) setTab('mesas');
+  }, [setTab, tab, user]);
 
   const applyState = useCallback((nextState: AppState) => {
     setState(nextState);

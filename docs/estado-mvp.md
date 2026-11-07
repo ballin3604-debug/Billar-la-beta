@@ -49,6 +49,16 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 - La sección Personal incluye una planilla imprimible con resumen por persona y detalle de entradas y salidas, exportable a PDF mediante el diálogo de impresión.
 - Las jornadas sin salida quedan marcadas para revisión.
 
+## Roles y permisos
+
+- **Administrador (dueño):** mantiene todas las vistas y reportes: mesas, caja, venta rápida de barra, historial, ajustes, anulaciones, asistencia global, auditoría, exportaciones y planillas.
+- **Cajero:** su alcance se limita a `Mesas`, `Egresos` y `Cierre`. Puede iniciar y cobrar mesas, registrar egresos propios y cerrar la caja con arqueo ciego.
+- El cajero no puede abrir la caja, vender en barra, anular movimientos, consultar historial ni entrar a ajustes. Si la caja está cerrada, ve un aviso para esperar la apertura del administrador.
+- La API valida el rol de administrador para historial, asistencia, detalle de turnos, apertura de caja, ventas de barra y anulaciones. La restricción no depende de ocultar botones en la interfaz.
+- El estado del turno que recibe el cajero está sanitizado: solo incluye sus propios egresos y su propia asistencia. No incluye ventas, partidas, pagos QR, resúmenes, arqueo, auditoría ni el fondo inicial.
+- El cierre del cajero usa arqueo ciego y no exige observaciones por diferencia, para no revelar si hubo faltante o sobrante. El administrador sí debe explicar las diferencias y recibe el detalle completo del cierre.
+- El administrador conserva el detalle completo de los turnos cerrados por cajeros, incluyendo diferencias, egresos y asistencia.
+
 ## Acceso directo
 
 - El icono **Billar & Bar** del escritorio ejecuta `desktop\BillarBar.exe`.

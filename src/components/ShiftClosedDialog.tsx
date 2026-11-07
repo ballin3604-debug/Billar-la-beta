@@ -37,13 +37,84 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
   const { settings, user, attendanceToday } = useApp();
   if (!shift) return null;
 
+  const isAdmin = user?.role === 'admin';
   const currency = settings?.currency || 'Bs';
+
+  if (!isAdmin) {
+    const ownAttendance =
+      shift.attendance.find((entry) => entry.userId === user?.id) ?? attendanceToday;
+    const checkIn = ownAttendance?.checkInAt ?? null;
+    const checkOut = ownAttendance?.checkOutAt ?? shift.closedAt;
+
+    return (
+      <Modal
+        open
+        title="Caja cerrada correctamente"
+        subtitle={`Turno #${shift.id} · ${formatDateTime(shift.closedAt)}`}
+        icon={<CheckCircle2 className="h-4 w-4" />}
+        onClose={onClose}
+        size="md"
+        footer={
+          <button type="button" className="btn-primary" onClick={onClose}>
+            Volver a mesas
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-4 py-3">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+            <div>
+              <p className="text-sm font-bold text-emerald-300">Tu salida quedó registrada</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                El turno quedó bloqueado. El administrador revisará el arqueo y los movimientos.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-[#08111d] p-4">
+            <div className="grid gap-3 text-xs sm:grid-cols-2">
+              <div className="flex justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-slate-500">
+                  <LogIn className="h-3 w-3" />
+                  Entrada
+                </span>
+                <span className="num text-slate-300">
+                  {checkIn ? formatClock(checkIn) : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Salida</span>
+                <span className="num text-emerald-300">
+                  {checkOut ? formatClock(checkOut) : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Turno</span>
+                <span className="num text-slate-300">#{shift.id}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-slate-500">
+                  <Clock className="h-3 w-3" />
+                  Cierre
+                </span>
+                <span className="num text-slate-300">{formatDateTime(shift.closedAt)}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[10px] leading-relaxed text-slate-500">
+            La caja debe abrirla el administrador para el próximo turno.
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
   const closing = shift.closing;
   const difference = Number(closing?.difference ?? 0);
   const balanced = Math.abs(difference) < 0.01;
   const expected = closing?.expectedCash ?? null;
   const counted = closing?.countedCash ?? null;
-  const isAdmin = user?.role === 'admin';
 
   return (
     <Modal

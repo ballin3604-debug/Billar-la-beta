@@ -13,7 +13,7 @@ import {
 import type { Table } from '../types';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
-import { calculateSession, formatClock, formatMoney, plural } from '../lib/format';
+import { calculateSession, cn, formatClock, formatMoney, plural } from '../lib/format';
 import { useNow } from '../lib/useNow';
 import { StatCard } from './ui/StatCard';
 import { TableCard } from './TableCard';
@@ -33,8 +33,10 @@ export const TablesView: React.FC = () => {
     clockOffset,
     runAction,
     refresh,
+    user,
   } = useApp();
   const now = useNow(clockOffset);
+  const isAdmin = user?.role === 'admin';
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [checkoutId, setCheckoutId] = useState<number | null>(null);
   const [barOpen, setBarOpen] = useState(false);
@@ -130,14 +132,16 @@ export const TablesView: React.FC = () => {
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-          <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
-            <CupSoda className="h-4 w-4 text-sky-400" />
-            Venta rápida
-          </button>
+          {isAdmin ? (
+            <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
+              <CupSoda className="h-4 w-4 text-sky-400" />
+              Venta rápida
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      <div className={cn('grid grid-cols-2 gap-2.5', isAdmin && 'lg:grid-cols-4')}>
         <StatCard
           label="Mesas libres"
           value={activeTables.length - occupiedTables.length}
@@ -156,20 +160,24 @@ export const TablesView: React.FC = () => {
           icon={<TableProperties className="h-4 w-4" />}
           tone="rose"
         />
-        <StatCard
-          label="En mesas ahora"
-          value={formatMoney(inProgress, currency)}
-          hint="Billar + consumo en curso"
-          icon={<Clock3 className="h-4 w-4" />}
-          tone="sky"
-        />
-        <StatCard
-          label="Ventas del turno"
-          value={formatMoney(currentShift?.totals.grossTotal, currency)}
-          hint={`QR ${formatMoney(currentShift?.totals.totalQr, currency)}`}
-          icon={<Wallet className="h-4 w-4" />}
-          tone="amber"
-        />
+        {isAdmin ? (
+          <>
+            <StatCard
+              label="En mesas ahora"
+              value={formatMoney(inProgress, currency)}
+              hint="Billar + consumo en curso"
+              icon={<Clock3 className="h-4 w-4" />}
+              tone="sky"
+            />
+            <StatCard
+              label="Ventas del turno"
+              value={formatMoney(currentShift?.totals.grossTotal, currency)}
+              hint={`QR ${formatMoney(currentShift?.totals.totalQr, currency)}`}
+              icon={<Wallet className="h-4 w-4" />}
+              tone="amber"
+            />
+          </>
+        ) : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -282,29 +290,31 @@ export const TablesView: React.FC = () => {
                 )}
               </div>
 
-              <div className="border-t border-slate-800/80 bg-[#08111d] px-4 py-3">
-                <p className="label">Resumen rápido del turno</p>
-                <div className="space-y-1.5 text-[11px]">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Billar</span>
-                    <span className="num text-slate-300">
-                      {formatMoney(currentShift?.totals.totalBilliard, currency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Productos</span>
-                    <span className="num text-slate-300">
-                      {formatMoney(currentShift?.totals.totalProducts, currency)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Cobrado por QR</span>
-                    <span className="num text-sky-300">
-                      {formatMoney(currentShift?.totals.totalQr, currency)}
-                    </span>
+              {isAdmin ? (
+                <div className="border-t border-slate-800/80 bg-[#08111d] px-4 py-3">
+                  <p className="label">Resumen rápido del turno</p>
+                  <div className="space-y-1.5 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Billar</span>
+                      <span className="num text-slate-300">
+                        {formatMoney(currentShift?.totals.totalBilliard, currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Productos</span>
+                      <span className="num text-slate-300">
+                        {formatMoney(currentShift?.totals.totalProducts, currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Cobrado por QR</span>
+                      <span className="num text-sky-300">
+                        {formatMoney(currentShift?.totals.totalQr, currency)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           )}
         </aside>
@@ -356,7 +366,7 @@ export const TablesView: React.FC = () => {
         }}
       />
 
-      <BarSaleModal open={barOpen} onClose={() => setBarOpen(false)} />
+      {isAdmin ? <BarSaleModal open={barOpen} onClose={() => setBarOpen(false)} /> : null}
     </div>
   );
 };

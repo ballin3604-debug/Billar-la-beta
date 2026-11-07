@@ -417,7 +417,9 @@ export function buildState(viewer) {
 
   const openShift = getOpenShiftRow();
   const currentShift = openShift
-    ? getShiftDetail(openShift.id, viewer, { includeAudit: false })
+    ? viewer?.role === 'admin'
+      ? getShiftDetail(openShift.id, viewer, { includeAudit: false })
+      : getCashierShiftDetail(openShift.id, viewer)
     : null;
 
   const users = viewer?.role === 'admin'
@@ -740,6 +742,103 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
     attendance,
     closing,
     audit,
+  };
+}
+
+/**
+ * Vista mínima del turno para cajeros.
+ * Solo expone sus propios egresos y su propia asistencia; nunca ventas,
+ * partidas, QR, resúmenes, arqueo ni auditoría.
+ */
+export function getCashierShiftDetail(shiftId, viewer) {
+  const shift = getShiftRow(shiftId);
+  if (!shift) return null;
+
+  const userId = viewer?.id ?? 0;
+  const expenseRows = all(
+    'SELECT * FROM expenses WHERE shift_id = ? AND created_by = ? ORDER BY created_at ASC, id ASC',
+    shiftId,
+    userId
+  );
+  const expenseItemRows = all(
+    `SELECT ei.*
+     FROM expense_items ei
+     JOIN expenses e ON e.id = ei.expense_id
+     WHERE e.shift_id = ? AND e.created_by = ?
+     ORDER BY ei.id ASC`,
+    shiftId,
+    userId
+  );
+  const expenseItemsByExpense = new Map();
+  for (const row of expenseItemRows) {
+    if (!expenseItemsByExpense.has(row.expense_id)) {
+      expenseItemsByExpense.set(row.expense_id, []);
+    }
+    expenseItemsByExpense.get(row.expense_id).push({
+      id: row.id,
+      productId: row.product_id,
+      name: row.name,
+      quantity: row.quantity,
+      unitPrice: row.unit_price,
+      subtotal: round2(Number(row.quantity || 0) * Number(row.unit_price || 0)),
+    });
+  }
+  const expenses = expenseRows.map((row) =>
+    mapExpense(row, expenseItemsByExpense.get(row.id) || [])
+  );
+  const activeExpenses = expenses.filter((expense) => expense.status === 'active');
+  const totalExpenses = round2(
+    activeExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0)
+  );
+
+  const attendanceRows = all(
+    `SELECT * FROM staff_attendance
+     WHERE user_id = ?
+       AND (shift_id = ? OR closed_shift_id = ?
+            OR id = (
+              SELECT sa.id FROM staff_attendance sa
+              WHERE sa.user_id = ? AND sa.check_out_at IS NULL AND sa.check_in_at <= ?
+              ORDER BY sa.check_in_at DESC, sa.id DESC LIMIT 1
+            ))
+     ORDER BY check_in_at ASC, id ASC`,
+    userId,
+    shiftId,
+    shiftId,
+    userId,
+    shift.opened_at
+  );
+
+  return {
+    id: shift.id,
+    dateStart: shift.date_start,
+    dateEnd: shift.closed_at ? localDateKey(new Date(shift.closed_at)) : null,
+    openedAt: shift.opened_at,
+    openedByName: shift.opened_by_name,
+    closedAt: shift.closed_at,
+    closedByName: shift.closed_by_name,
+    status: shift.status,
+    totals: {
+      totalBilliard: 0,
+      totalProducts: 0,
+      tableProducts: 0,
+      barSales: 0,
+      grossTotal: 0,
+      totalQr: 0,
+      totalExpenses,
+      playsCount: 0,
+      salesCount: 0,
+      expensesCount: activeExpenses.length,
+      itemsCount: 0,
+    },
+    tablePlays: [],
+    sales: [],
+    expenses,
+    qrPayments: [],
+    tableSummary: [],
+    productSummary: [],
+    attendance: attendanceRows.map(mapAttendance),
+    closing: null,
+    audit: undefined,
   };
 }
 

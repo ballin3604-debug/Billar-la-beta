@@ -22,6 +22,7 @@ import {
   round2,
   buildState,
   getShiftDetail,
+  getCashierShiftDetail,
   getHistory,
   getOpenShiftRow,
   getOpenSessionForTable,
@@ -373,22 +374,22 @@ export function createApiRouter() {
     res.json({ ok: true, state: publicState(req) });
   });
 
-  router.get('/history', authRequired, (req, res) => {
+  router.get('/history', authRequired, adminRequired, (req, res) => {
     res.json({ ok: true, shifts: getHistory(req.user) });
   });
 
-  router.get('/attendance', authRequired, (req, res) => {
+  router.get('/attendance', authRequired, adminRequired, (req, res) => {
     res.json({ ok: true, entries: getAttendance(req.user, req.query.limit) });
   });
 
-  router.get('/shifts/:id', authRequired, (req, res) => {
+  router.get('/shifts/:id', authRequired, adminRequired, (req, res) => {
     const shiftId = parsePositiveId(req.params.id, 'turno');
     const shift = getShiftDetail(shiftId, req.user, { includeAudit: true });
     if (!shift) throw new HttpError(404, 'El turno no existe.');
     res.json({ ok: true, shift });
   });
 
-  router.post('/shifts/open', authRequired, (req, res) => {
+  router.post('/shifts/open', authRequired, adminRequired, (req, res) => {
     if (getOpenShiftRow()) {
       throw new HttpError(409, 'Ya hay una caja abierta. Ciérrala antes de abrir otra.');
     }
@@ -453,7 +454,7 @@ export function createApiRouter() {
       ? req.body.denominations
       : null;
 
-    if (Math.abs(difference) > 0.009 && !notes) {
+    if (req.user.role === 'admin' && Math.abs(difference) > 0.009 && !notes) {
       throw new HttpError(400, 'Explica la diferencia de caja antes de cerrar el turno.');
     }
 
@@ -515,10 +516,12 @@ export function createApiRouter() {
       console.error('No se pudo crear el respaldo automático:', error);
     }
 
-    const closedShift = getShiftDetail(shift.id, req.user, {
-      includeExpected: true,
-      includeAudit: false,
-    });
+    const closedShift = req.user.role === 'admin'
+      ? getShiftDetail(shift.id, req.user, {
+          includeExpected: true,
+          includeAudit: false,
+        })
+      : getCashierShiftDetail(shift.id, req.user);
 
     res.json({
       ok: true,
@@ -820,7 +823,7 @@ export function createApiRouter() {
     });
   });
 
-  router.post('/sales', authRequired, (req, res) => {
+  router.post('/sales', authRequired, adminRequired, (req, res) => {
     const shift = requireOpenShift();
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
     if (rawItems.length === 0) throw new HttpError(400, 'La venta no tiene productos.');
