@@ -191,6 +191,17 @@ export interface AuditEntry {
   details: Record<string, unknown> | null;
 }
 
+export interface StaffAttendance {
+  id: number;
+  userId: number;
+  userName: string;
+  date: string;
+  checkInAt: string;
+  checkOutAt: string | null;
+  shiftId: number | null;
+  closedShiftId: number | null;
+}
+
 export interface ShiftDetail {
   id: number;
   dateStart: string;
@@ -234,6 +245,7 @@ export interface AppState {
   products: Product[];
   currentShift: ShiftDetail | null;
   users?: User[];
+  attendanceToday: StaffAttendance | null;
   serverTime: string;
 }
 

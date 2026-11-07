@@ -198,6 +198,8 @@ export function actionLabel(action: string) {
     login_failed: 'Intento de PIN fallido',
     login_failed_duplicate_pin: 'PIN duplicado',
     change_pin: 'Cambio de PIN',
+    staff_check_in: 'Entrada de personal',
+    staff_check_out: 'Salida de personal',
     shift_open: 'Apertura de caja',
     shift_close: 'Cierre de caja',
     table_start: 'Mesa iniciada',

@@ -195,6 +195,20 @@ function createSchema() {
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed'))
     );
 
+    CREATE TABLE IF NOT EXISTS staff_attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      user_name TEXT NOT NULL,
+      work_date TEXT NOT NULL,
+      check_in_at TEXT NOT NULL,
+      check_out_at TEXT,
+      shift_id INTEGER REFERENCES shifts(id),
+      closed_shift_id INTEGER REFERENCES shifts(id),
+      check_in_ip TEXT,
+      check_out_ip TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       shift_id INTEGER NOT NULL REFERENCES shifts(id),
@@ -325,6 +339,8 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
     CREATE INDEX IF NOT EXISTS idx_audit_shift ON audit_log(shift_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON staff_attendance(user_id, work_date);
+    CREATE INDEX IF NOT EXISTS idx_attendance_check_in ON staff_attendance(check_in_at);
   `);
 }
 

@@ -3,6 +3,7 @@ dist/
 build/
 coverage/
 data/
+desktop/*.exe
 .DS_Store
 *.log
 .env*

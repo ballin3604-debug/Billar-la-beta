@@ -6,6 +6,7 @@ import type {
   MutationResponse,
   ShiftDetail,
   ShiftHistoryItem,
+  StaffAttendance,
   User,
 } from '../types';
 
@@ -111,6 +112,9 @@ export const api = {
   state: () => request<{ ok: boolean; state: AppState }>('/state'),
 
   history: () => request<{ ok: boolean; shifts: ShiftHistoryItem[] }>('/history'),
+
+  attendance: (limit = 300) =>
+    request<{ ok: boolean; entries: StaffAttendance[] }>(`/attendance?limit=${limit}`),
 
   shift: (id: number) => request<{ ok: boolean; shift: ShiftDetail }>(`/shifts/${id}`),
 

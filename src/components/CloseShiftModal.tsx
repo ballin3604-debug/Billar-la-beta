@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  LogIn,
+  LogOut,
   LockKeyhole,
   ShieldAlert,
   Wallet,
@@ -8,7 +10,8 @@ import {
 import type { ShiftDetail } from '../types';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
-import { formatMoney } from '../lib/format';
+import { formatClock, formatMoney } from '../lib/format';
+import { useNow } from '../lib/useNow';
 import { Modal } from './ui/Modal';
 
 interface CloseShiftModalProps {
@@ -31,8 +34,11 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
     settings,
     user,
     tables,
+    attendanceToday,
+    clockOffset,
     applyMutation,
   } = useApp();
+  const now = useNow(clockOffset);
   const currency = settings?.currency || 'Bs';
   const [detailDenominations, setDetailDenominations] = useState(true);
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -142,6 +148,27 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
       }
     >
       <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center justify-between rounded-xl border border-sky-500/20 bg-sky-500/[0.05] px-3.5 py-2.5">
+            <span className="flex items-center gap-2 text-[11px] text-sky-200/90">
+              <LogIn className="h-3.5 w-3.5" />
+              Entrada
+            </span>
+            <span className="num text-sm font-bold text-sky-200">
+              {attendanceToday ? formatClock(attendanceToday.checkInAt) : '—'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-3.5 py-2.5">
+            <span className="flex items-center gap-2 text-[11px] text-emerald-200/90">
+              <LogOut className="h-3.5 w-3.5" />
+              Salida
+            </span>
+            <span className="num text-sm font-bold text-emerald-300">
+              {formatClock(new Date(now))}
+            </span>
+          </div>
+        </div>
+
         {openTables.length > 0 ? (
           <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/[0.08] px-3.5 py-3 text-xs text-rose-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -291,7 +318,7 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2 text-[10px] leading-relaxed text-amber-200/80">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             Al cerrar, el turno queda bloqueado. No se podrá agregar, cobrar ni anular nada de este
-            turno. Se creará un respaldo automático.
+            turno. Se creará un respaldo automático y se registrará tu salida con la hora del arqueo.
           </div>
         )}
       </div>

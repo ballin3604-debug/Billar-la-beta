@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock,
+  LogIn,
   Printer,
   ReceiptText,
   Replace,
@@ -12,6 +13,7 @@ import {
 import type { ShiftDetail } from '../types';
 import { useApp } from '../context/AppContext';
 import {
+  formatClock,
   formatDateTime,
   formatMoney,
   formatShiftRange,
@@ -32,7 +34,7 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
   onViewHistory,
   onNewShift,
 }) => {
-  const { settings, user } = useApp();
+  const { settings, user, attendanceToday } = useApp();
   if (!shift) return null;
 
   const currency = settings?.currency || 'Bs';
@@ -93,8 +95,8 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
             </p>
             <p className="mt-1 text-xs leading-relaxed text-slate-400">
               {balanced
-                ? 'El efectivo contado coincide con lo registrado. El turno quedó bloqueado y auditado.'
-                : 'El cierre quedó registrado con la diferencia y las observaciones. El administrador podrá revisarlo.'}
+                ? 'El efectivo contado coincide con lo registrado. El turno quedó bloqueado, auditado y tu salida quedó registrada.'
+                : 'El cierre quedó registrado con la diferencia y las observaciones. Tu salida quedó registrada y el administrador podrá revisarlo.'}
             </p>
           </div>
         </div>
@@ -147,6 +149,20 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
                   {formatDateTime(shift.closedAt)} · {shift.closedByName}
                 </span>
               </div>
+              {attendanceToday ? (
+                <div className="flex justify-between gap-3">
+                  <span className="flex items-center gap-1.5 text-slate-500">
+                    <LogIn className="h-3 w-3" />
+                    Entrada / salida
+                  </span>
+                  <span className="num text-emerald-300">
+                    {formatClock(attendanceToday.checkInAt)} →{' '}
+                    {attendanceToday.checkOutAt
+                      ? formatClock(attendanceToday.checkOutAt)
+                      : formatClock(shift.closedAt)}
+                  </span>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-3">
                 <span className="text-slate-500">Fondo inicial</span>
                 <span className="num text-slate-300">{formatMoney(shift.initialCash, currency)}</span>

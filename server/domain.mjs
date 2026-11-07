@@ -3,6 +3,8 @@ import {
   get,
   getSettings,
   localDateKey,
+  nowIso,
+  run,
 } from './database.mjs';
 
 export class HttpError extends Error {
@@ -101,6 +103,145 @@ export function publicUser(user) {
     mustChangePin: Boolean(user.must_change_pin),
     createdAt: user.created_at,
   };
+}
+
+function mapAttendance(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    date: row.work_date,
+    checkInAt: row.check_in_at,
+    checkOutAt: row.check_out_at,
+    shiftId: row.shift_id,
+    closedShiftId: row.closed_shift_id,
+  };
+}
+
+export function getLatestAttendanceForUser(userId, workDate = null) {
+  const row = workDate
+    ? get(
+        `SELECT * FROM staff_attendance
+         WHERE user_id = ? AND work_date = ?
+         ORDER BY check_in_at DESC, id DESC LIMIT 1`,
+        userId,
+        workDate
+      )
+    : get(
+        `SELECT * FROM staff_attendance
+         WHERE user_id = ?
+         ORDER BY check_in_at DESC, id DESC LIMIT 1`,
+        userId
+      );
+  return mapAttendance(row);
+}
+
+export function getCurrentAttendanceForUser(userId) {
+  const open = get(
+    `SELECT * FROM staff_attendance
+     WHERE user_id = ? AND check_out_at IS NULL
+     ORDER BY check_in_at DESC, id DESC LIMIT 1`,
+    userId
+  );
+  return mapAttendance(open) || getLatestAttendanceForUser(userId, localDateKey());
+}
+
+export function recordStaffCheckIn({ user, shiftId = null, ip = null, at = nowIso() }) {
+  const workDate = localDateKey(new Date(at));
+  const existing = get(
+    `SELECT * FROM staff_attendance
+     WHERE user_id = ? AND work_date = ? AND check_out_at IS NULL
+     ORDER BY id DESC LIMIT 1`,
+    user.id,
+    workDate
+  );
+  if (existing) {
+    return { attendance: mapAttendance(existing), created: false };
+  }
+
+  const result = run(
+    `INSERT INTO staff_attendance
+     (user_id, user_name, work_date, check_in_at, shift_id, check_in_ip, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    user.id,
+    user.name,
+    workDate,
+    at,
+    shiftId,
+    ip,
+    at
+  );
+  const row = get(
+    'SELECT * FROM staff_attendance WHERE id = ?',
+    Number(result.lastInsertRowid)
+  );
+  return { attendance: mapAttendance(row), created: true };
+}
+
+export function recordStaffCheckOut({ user, shift, ip = null, at = nowIso() }) {
+  const open = get(
+    `SELECT * FROM staff_attendance
+     WHERE user_id = ? AND check_out_at IS NULL
+     ORDER BY check_in_at DESC, id DESC LIMIT 1`,
+    user.id
+  );
+
+  if (open) {
+    run(
+      `UPDATE staff_attendance
+       SET check_out_at = ?, closed_shift_id = ?, check_out_ip = ?
+       WHERE id = ?`,
+      at,
+      shift.id,
+      ip,
+      open.id
+    );
+    return mapAttendance(get('SELECT * FROM staff_attendance WHERE id = ?', open.id));
+  }
+
+  // Si la entrada no se registró (por ejemplo, una sesión anterior a esta función),
+  // se conserva igualmente la salida para no perder el dato del arqueo.
+  const checkInAt = Number(shift.opened_by) === Number(user.id) ? shift.opened_at : at;
+  const result = run(
+    `INSERT INTO staff_attendance
+     (user_id, user_name, work_date, check_in_at, check_out_at, shift_id, closed_shift_id,
+      check_in_ip, check_out_ip, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    user.id,
+    user.name,
+    localDateKey(new Date(checkInAt)),
+    checkInAt,
+    at,
+    shift.id,
+    shift.id,
+    ip,
+    ip,
+    at
+  );
+  const row = get(
+    'SELECT * FROM staff_attendance WHERE id = ?',
+    Number(result.lastInsertRowid)
+  );
+  return mapAttendance(row);
+}
+
+export function getAttendance(viewer, limit = 300) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 1000);
+  const rows = viewer?.role === 'admin'
+    ? all(
+        `SELECT * FROM staff_attendance
+         ORDER BY check_in_at DESC, id DESC LIMIT ?`,
+        safeLimit
+      )
+    : all(
+        `SELECT * FROM staff_attendance
+         WHERE user_id = ?
+         ORDER BY check_in_at DESC, id DESC LIMIT ?`,
+        viewer?.id ?? 0,
+        safeLimit
+      );
+  return rows.map(mapAttendance);
 }
 
 export function getOpenShiftRow() {
@@ -281,6 +422,7 @@ export function buildState(viewer) {
   const users = viewer?.role === 'admin'
     ? all('SELECT * FROM users ORDER BY active DESC, name ASC').map(publicUser)
     : undefined;
+  const attendanceToday = viewer ? getCurrentAttendanceForUser(viewer.id) : null;
 
   return {
     user: publicUser(viewer),
@@ -289,6 +431,7 @@ export function buildState(viewer) {
     products: productsRows.map(mapProduct),
     currentShift,
     users,
+    attendanceToday,
     serverTime: new Date().toISOString(),
   };
 }

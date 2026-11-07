@@ -18,8 +18,10 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 - Cobros en efectivo, QR y pago mixto.
 - Comprobantes y planillas para imprimir.
 - Gastos, cierre de caja y arqueo con diferencia.
+- Registro automático de entrada del personal al iniciar sesión y de salida al cerrar caja.
 - Historial de turnos, partidas, ventas y auditoría.
-- Administración de mesas, productos, usuarios y respaldos.
+- Administración de mesas, productos, usuarios, personal y respaldos.
+- Acceso directo de escritorio con ventana de aplicación, sin barra de navegador.
 
 ## En revisión de diseño
 
@@ -35,6 +37,22 @@ Presentar al dueño una versión funcional y navegable del sistema, con la opera
 2. Registrar observaciones de uso y ajustar textos, colores y prioridades.
 3. Cerrar la versión de instalación.
 4. Instalar en el equipo del billar y capacitar al personal.
+
+## Registro de personal
+
+- La entrada se crea con cada ingreso exitoso con PIN. Si ya hay una jornada abierta del mismo día, no se duplica.
+- La salida se registra al confirmar el arqueo y cerrar la caja, no al cerrar sesión ni al bloquear la pantalla.
+- Se permiten varias jornadas en el mismo día si la anterior ya fue cerrada.
+- El dueño ve todos los registros en `Ajustes > Personal`; la API solo entrega a cada cajero sus propios registros.
+- Las jornadas sin salida quedan marcadas para revisión.
+
+## Acceso directo
+
+- El icono **Billar & Bar** del escritorio ejecuta `desktop\BillarBar.exe`.
+- Si el servidor local no está activo, lo inicia en segundo plano; si ya está activo, solo abre la ventana.
+- La ventana usa el modo aplicación de Edge o Chrome, sin barra de direcciones ni pestañas.
+- `iniciar.bat` queda como respaldo y herramienta de diagnóstico.
+- El acceso directo se puede recrear con `desktop\build-launcher.ps1`.
 
 ## Notas de presentación
 

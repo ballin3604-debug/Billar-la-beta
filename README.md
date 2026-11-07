@@ -13,13 +13,15 @@ Sistema local de caja, mesas y control de consumo para billar y bar. Funciona si
 - **Cobros:** efectivo, QR y pago mixto, con comprobante para imprimir.
 - **Caja diaria:** apertura de turno, fondo inicial, gastos, ventas y cierre con arqueo.
 - **Historial:** turnos cerrados, partidas, ventas, gastos, diferencias y auditoría.
+- **Personal:** registro automático de entrada al iniciar sesión y de salida al cerrar caja, con duración y filtros para el dueño.
 - **Administración:** mesas, tarifas, productos, usuarios, respaldos y exportaciones CSV.
+- **Acceso directo:** icono en el escritorio que abre el sistema en una ventana de aplicación, sin barra de navegador.
 - **Operación local:** pensado para funcionar en la computadora del billar, sin depender de la nube.
 
 ## Requisitos
 
 - Node.js 22.5 o superior.
-- Windows para usar `iniciar.bat` (también se puede ejecutar con los comandos de abajo).
+- Windows para usar el acceso directo o `iniciar.bat` (también se puede ejecutar con los comandos de abajo).
 
 ## Ejecutar en desarrollo
 
@@ -38,7 +40,31 @@ npm run build
 npm start
 ```
 
-En Windows también se puede abrir `iniciar.bat`, que instala dependencias, compila la interfaz y abre el sistema en el navegador.
+En Windows también se puede abrir `iniciar.bat`, que instala dependencias, compila la interfaz y abre el sistema en el navegador. Queda como método de respaldo y diagnóstico.
+
+## Acceso directo en Windows
+
+El uso diario recomendado es el icono **Billar & Bar** del escritorio:
+
+1. La primera vez, ejecutar una vez desde la carpeta del proyecto:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File desktop\build-launcher.ps1
+   ```
+
+   Ese script genera el icono, compila el lanzador y crea el acceso directo en el escritorio.
+
+2. Abrir el sistema con el icono. Si el servidor local no está activo, lo inicia sin mostrar una ventana de consola; si ya está activo, solo abre la ventana de la aplicación.
+
+La ventana usa el modo aplicación de Edge o Chrome: no muestra barra de direcciones ni pestañas. `desktop\BillarBar.exe` es un archivo generado y no se versiona; el código y el script sí.
+
+## Registro de personal
+
+- La **entrada** se guarda automáticamente al ingresar con el PIN.
+- La **salida** se guarda al confirmar el arqueo y cerrar la caja.
+- Cerrar sesión o bloquear la pantalla no registra una salida.
+- El dueño puede consultar los registros en `Ajustes > Personal`, con búsqueda y filtro de jornadas sin salida.
+- Si una jornada no tiene salida, queda marcada para revisión.
 
 ## Datos y respaldos
 
@@ -52,6 +78,7 @@ En Windows también se puede abrir `iniciar.bat`, que instala dependencias, comp
 ```text
 src/            Interfaz React (mesas, caja, historial, ajustes)
 server/         API local con Express y SQLite
+desktop/        Código, icono y script del acceso directo de Windows
 data/           Base de datos y respaldos (no versionado)
 documentos/     Cotización y documentación del proyecto
 public/         Recursos estáticos
@@ -65,6 +92,8 @@ public/         Recursos estáticos
 | Consumos y barra | Operativo |
 | Cobros y comprobantes | Operativo |
 | Cierre de caja y arqueo | Operativo |
+| Entradas y salidas del personal | Operativo |
+| Acceso directo de escritorio | Operativo |
 | Historial y auditoría | Operativo |
 | Experiencia visual y textos | En revisión de diseño |
 | Instalación y capacitación | Siguiente hito |

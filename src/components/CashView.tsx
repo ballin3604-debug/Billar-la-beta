@@ -7,6 +7,7 @@ import {
   CupSoda,
   History,
   LockKeyhole,
+  LogIn,
   Printer,
   QrCode,
   ReceiptText,
@@ -86,6 +87,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
     settings,
     user,
     tables,
+    attendanceToday,
     clockOffset,
     runAction,
     refresh,
@@ -182,6 +184,12 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
               Abrió {shift.openedByName}
             </span>
+            {attendanceToday ? (
+              <span className="flex items-center gap-1.5">
+                <LogIn className="h-3.5 w-3.5 text-sky-500/70" />
+                Entrada {formatClock(attendanceToday.checkInAt)}
+              </span>
+            ) : null}
           </p>
         </div>
 

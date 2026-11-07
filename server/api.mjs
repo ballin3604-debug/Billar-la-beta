@@ -30,6 +30,9 @@ import {
   computeSessionCost,
   normalizePayment,
   publicUser,
+  getAttendance,
+  recordStaffCheckIn,
+  recordStaffCheckOut,
 } from './domain.mjs';
 
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
@@ -267,8 +270,25 @@ export function createApiRouter() {
 
     const user = matches[0];
     loginAttempts.delete(ip);
-    const token = issueToken(user);
     const shift = getOpenShiftRow();
+    const attendance = recordStaffCheckIn({
+      user,
+      shiftId: shift?.id ?? null,
+      ip,
+    });
+    if (attendance.created) {
+      logAudit({
+        user,
+        action: 'staff_check_in',
+        entityType: 'user',
+        entityId: user.id,
+        shiftId: shift?.id ?? null,
+        details: { checkInAt: attendance.attendance.checkInAt },
+        ip,
+      });
+    }
+
+    const token = issueToken(user);
     logAudit({
       user,
       action: 'login',
@@ -357,6 +377,10 @@ export function createApiRouter() {
     res.json({ ok: true, shifts: getHistory(req.user) });
   });
 
+  router.get('/attendance', authRequired, (req, res) => {
+    res.json({ ok: true, entries: getAttendance(req.user, req.query.limit) });
+  });
+
   router.get('/shifts/:id', authRequired, (req, res) => {
     const shiftId = parsePositiveId(req.params.id, 'turno');
     const shift = getShiftDetail(shiftId, req.user, { includeAudit: true });
@@ -433,13 +457,16 @@ export function createApiRouter() {
       throw new HttpError(400, 'Explica la diferencia de caja antes de cerrar el turno.');
     }
 
+    const closedAt = nowIso();
+    let attendance = null;
+
     transaction(() => {
       run(
         `UPDATE shifts
          SET status = 'closed', closed_at = ?, closed_by = ?, closed_by_name = ?,
              expected_cash = ?, counted_cash = ?, difference = ?, closing_notes = ?, denominations = ?
          WHERE id = ?`,
-        nowIso(),
+        closedAt,
         req.user.id,
         req.user.name,
         expectedCash,
@@ -449,6 +476,12 @@ export function createApiRouter() {
         denominations ? JSON.stringify(denominations) : null,
         shift.id
       );
+      attendance = recordStaffCheckOut({
+        user: req.user,
+        shift,
+        ip: req.ipAddress,
+        at: closedAt,
+      });
     });
 
     logAudit({
@@ -460,6 +493,21 @@ export function createApiRouter() {
       details: { expectedCash, countedCash, difference, notes },
       ip: req.ipAddress,
     });
+
+    if (attendance) {
+      logAudit({
+        user: req.user,
+        action: 'staff_check_out',
+        entityType: 'user',
+        entityId: req.user.id,
+        shiftId: shift.id,
+        details: {
+          checkInAt: attendance.checkInAt,
+          checkOutAt: attendance.checkOutAt,
+        },
+        ip: req.ipAddress,
+      });
+    }
 
     try {
       createBackup('cierre');

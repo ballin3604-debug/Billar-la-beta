@@ -29,6 +29,7 @@ export const Header: React.FC = () => {
     settings,
     currentShift,
     tables,
+    attendanceToday,
     tab,
     setTab,
     lock,
@@ -90,7 +91,14 @@ export const Header: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1.5">
-              <div className="mr-1 hidden items-center gap-2 rounded-xl border border-slate-800 bg-[#0b1422] py-1 pl-2 pr-2.5 sm:flex">
+              <div
+                className="mr-1 hidden items-center gap-2 rounded-xl border border-slate-800 bg-[#0b1422] py-1 pl-2 pr-2.5 sm:flex"
+                title={
+                  attendanceToday
+                    ? `Entrada registrada a las ${formatClock(attendanceToday.checkInAt)}`
+                    : undefined
+                }
+              >
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-black text-emerald-300">
                   {user?.name?.slice(0, 1).toUpperCase() || '?'}
                 </div>

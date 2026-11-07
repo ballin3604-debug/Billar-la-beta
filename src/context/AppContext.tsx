@@ -13,6 +13,7 @@ import type {
   MutationResponse,
   ReceiptData,
   Settings,
+  StaffAttendance,
   Tab,
   User,
 } from '../types';
@@ -43,6 +44,7 @@ interface AppContextValue {
   tables: AppState['tables'];
   products: AppState['products'];
   currentShift: AppState['currentShift'];
+  attendanceToday: StaffAttendance | null;
   users: User[];
   tab: Tab;
   setTab: (tab: Tab) => void;
@@ -359,6 +361,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tables: state?.tables ?? [],
       products: state?.products ?? [],
       currentShift: state?.currentShift ?? null,
+      attendanceToday: state?.attendanceToday ?? null,
       users: state?.users ?? [],
       tab,
       setTab,

@@ -3,12 +3,15 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Clock3,
   DatabaseBackup,
   Download,
   FileSpreadsheet,
   HardDrive,
   KeyRound,
   Loader2,
+  LogIn,
+  LogOut,
   Package,
   Pencil,
   Plus,
@@ -27,6 +30,7 @@ import type {
   Product,
   ProductCategory,
   Role,
+  StaffAttendance,
   Table,
   User,
 } from '../types';
@@ -35,25 +39,30 @@ import { api } from '../lib/api';
 import {
   actionLabel,
   cn,
+  durationLabel,
   formatBackupDate,
   formatBytes,
+  formatClock,
+  formatDateShort,
   formatDateTime,
   formatMoney,
   plural,
   productCategoryLabel,
   roleLabel,
+  todayInputDate,
 } from '../lib/format';
 import { Modal } from './ui/Modal';
 import { EmptyState } from './ui/EmptyState';
 import { ChangePinModal } from './ChangePinModal';
 
-type Section = 'negocio' | 'mesas' | 'productos' | 'usuarios' | 'respaldos' | 'auditoria';
+type Section = 'negocio' | 'mesas' | 'productos' | 'usuarios' | 'personal' | 'respaldos' | 'auditoria';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: React.ReactNode; hint: string }> = [
   { id: 'negocio', label: 'Negocio', icon: <Store className="h-4 w-4" />, hint: 'Nombre, tarifas y bloqueo' },
   { id: 'mesas', label: 'Mesas', icon: <TableProperties className="h-4 w-4" />, hint: 'Mesas y tarifas' },
   { id: 'productos', label: 'Productos', icon: <Package className="h-4 w-4" />, hint: 'Barra, stock y precios' },
   { id: 'usuarios', label: 'Usuarios', icon: <Users className="h-4 w-4" />, hint: 'Cajeros y PINs' },
+  { id: 'personal', label: 'Personal', icon: <Clock3 className="h-4 w-4" />, hint: 'Entradas y salidas' },
   { id: 'respaldos', label: 'Respaldos', icon: <DatabaseBackup className="h-4 w-4" />, hint: 'Copias y exportaciones' },
   { id: 'auditoria', label: 'Auditoría', icon: <ShieldCheck className="h-4 w-4" />, hint: 'Registro de acciones' },
 ];
@@ -110,6 +119,12 @@ export const SettingsView: React.FC = () => {
   const [auditUser, setAuditUser] = useState('');
   const [auditSensitiveOnly, setAuditSensitiveOnly] = useState(false);
 
+  const [attendance, setAttendance] = useState<StaffAttendance[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const [attendanceQuery, setAttendanceQuery] = useState('');
+  const [attendanceOnlyOpen, setAttendanceOnlyOpen] = useState(false);
+
   useEffect(() => {
     if (!settings) return;
     setBusinessForm({
@@ -147,10 +162,26 @@ export const SettingsView: React.FC = () => {
     }
   }, []);
 
+  const loadAttendance = useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError(null);
+    try {
+      const response = await api.attendance(400);
+      setAttendance(response.entries);
+    } catch (err) {
+      setAttendanceError(
+        err instanceof Error ? err.message : 'No se pudo cargar el registro de personal.'
+      );
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (section === 'respaldos') loadBackups();
     if (section === 'auditoria') loadAudit();
-  }, [section, loadBackups, loadAudit]);
+    if (section === 'personal') loadAttendance();
+  }, [section, loadBackups, loadAudit, loadAttendance]);
 
   const currency = settings?.currency || 'Bs';
 
@@ -259,6 +290,22 @@ export const SettingsView: React.FC = () => {
       );
     });
   }, [auditEntries, auditQuery, auditSensitiveOnly, auditUser]);
+
+  const filteredAttendance = useMemo(() => {
+    const term = attendanceQuery.trim().toLowerCase();
+    return attendance.filter((entry) => {
+      if (attendanceOnlyOpen && entry.checkOutAt) return false;
+      if (!term) return true;
+      return (
+        entry.userName.toLowerCase().includes(term) ||
+        entry.date.includes(term)
+      );
+    });
+  }, [attendance, attendanceOnlyOpen, attendanceQuery]);
+
+  const today = todayInputDate();
+  const openAttendance = attendance.filter((entry) => !entry.checkOutAt);
+  const todayAttendance = attendance.filter((entry) => entry.date === today);
 
   const sectionInfo = SECTIONS.find((item) => item.id === section);
 
@@ -790,6 +837,181 @@ export const SettingsView: React.FC = () => {
                   Cada cajero debe tener su propio usuario. No compartas el PIN del administrador
                   ni lo escribas en un papel visible. Revisa la auditoría ante cualquier diferencia
                   de caja.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {section === 'personal' ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="kpi">
+                  <LogIn className="h-4 w-4 text-emerald-400" />
+                  <p className="mt-2 label mb-1">Entradas</p>
+                  <p className="num text-base font-bold text-white">{attendance.length}</p>
+                </div>
+                <div className="kpi">
+                  <Clock3 className="h-4 w-4 text-amber-400" />
+                  <p className="mt-2 label mb-1">Jornadas abiertas</p>
+                  <p className="num text-base font-bold text-amber-300">{openAttendance.length}</p>
+                </div>
+                <div className="kpi">
+                  <LogOut className="h-4 w-4 text-sky-400" />
+                  <p className="mt-2 label mb-1">Entradas de hoy</p>
+                  <p className="num text-base font-bold text-sky-300">{todayAttendance.length}</p>
+                </div>
+              </div>
+
+              <div className="panel overflow-hidden">
+                <div className="panel-head flex-wrap">
+                  <div>
+                    <h3 className="text-xs font-bold text-white">Entradas y salidas del personal</h3>
+                    <p className="text-[10px] text-slate-500">
+                      La entrada se registra al iniciar sesión; la salida, al cerrar caja.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary px-2.5 py-1.5 text-[10px]"
+                    onClick={loadAttendance}
+                    disabled={attendanceLoading}
+                  >
+                    <RefreshCw className={cn('h-3.5 w-3.5', attendanceLoading && 'animate-spin')} />
+                    Actualizar
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-800/80 px-4 py-3">
+                  <div className="relative min-w-[180px] flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                    <input
+                      className="input pl-8"
+                      placeholder="Buscar por personal o fecha…"
+                      value={attendanceQuery}
+                      onChange={(event) => setAttendanceQuery(event.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className={cn('chip text-[10px]', attendanceOnlyOpen && 'chip-active')}
+                    onClick={() => setAttendanceOnlyOpen((previous) => !previous)}
+                  >
+                    <Clock3 className="h-3.5 w-3.5" />
+                    Sin salida
+                  </button>
+                </div>
+
+                {attendanceError ? (
+                  <EmptyState
+                    title="No se pudo cargar el personal"
+                    description={attendanceError}
+                    icon={<AlertTriangle className="h-6 w-6" />}
+                    className="m-4"
+                    action={
+                      <button type="button" className="btn-secondary" onClick={loadAttendance}>
+                        <RefreshCw className="h-4 w-4" />
+                        Reintentar
+                      </button>
+                    }
+                  />
+                ) : attendanceLoading ? (
+                  <div className="flex min-h-[220px] items-center justify-center gap-2 text-xs text-slate-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando entradas y salidas…
+                  </div>
+                ) : filteredAttendance.length === 0 ? (
+                  <EmptyState
+                    title="Sin registros de personal"
+                    description={
+                      attendance.length === 0
+                        ? 'Cuando alguien ingrese con su PIN, aquí aparecerá su hora de entrada.'
+                        : 'No hay registros que coincidan con los filtros.'
+                    }
+                    icon={<Clock3 className="h-6 w-6" />}
+                    className="m-4"
+                  />
+                ) : (
+                  <div className="scroll-thin overflow-x-auto">
+                    <table className="data-table min-w-[760px]">
+                      <thead className="table-head">
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Personal</th>
+                          <th>Entrada</th>
+                          <th>Salida</th>
+                          <th>Duración</th>
+                          <th>Turno</th>
+                          <th>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAttendance.map((entry) => {
+                          const isOpen = !entry.checkOutAt;
+                          const isToday = entry.date === today;
+                          const minutes = entry.checkOutAt
+                            ? Math.max(
+                                0,
+                                Math.round(
+                                  (new Date(entry.checkOutAt).getTime() -
+                                    new Date(entry.checkInAt).getTime()) /
+                                    60000
+                                )
+                              )
+                            : null;
+                          const shiftRef = entry.closedShiftId ?? entry.shiftId;
+                          return (
+                            <tr key={entry.id}>
+                              <td className="num whitespace-nowrap text-[10px] text-slate-400">
+                                {formatDateShort(entry.date)}
+                              </td>
+                              <td className="font-semibold text-slate-200">{entry.userName}</td>
+                              <td className="num text-slate-300">{formatClock(entry.checkInAt)}</td>
+                              <td className="num text-slate-300">
+                                {entry.checkOutAt ? formatClock(entry.checkOutAt) : '—'}
+                              </td>
+                              <td className="num text-slate-400">
+                                {isOpen ? 'En curso' : durationLabel(minutes ?? 0)}
+                              </td>
+                              <td className="num text-slate-500">
+                                {shiftRef ? `#${shiftRef}` : '—'}
+                              </td>
+                              <td>
+                                <span
+                                  className={cn(
+                                    'inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-bold',
+                                    isOpen
+                                      ? isToday
+                                        ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                                        : 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+                                      : 'border-slate-700 bg-slate-800/50 text-slate-400'
+                                  )}
+                                >
+                                  {isOpen ? (isToday ? 'En turno' : 'Sin salida') : 'Completa'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 bg-[#08111d] px-4 py-2.5 text-[10px] text-slate-500">
+                  <span>
+                    {plural(filteredAttendance.length, 'registro', 'registros')}{' '}
+                    {filteredAttendance.length === 1 ? 'visible' : 'visibles'} de {attendance.length}
+                  </span>
+                  <span>Entrada = inicio de sesión · Salida = arqueo de caja</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
+                <p className="font-bold text-sky-300">Registro automático</p>
+                <p className="mt-1">
+                  Cada ingreso con PIN abre una jornada con su hora de entrada. Al confirmar el
+                  arqueo y cerrar la caja, se guarda la hora de salida del usuario que cierra. Si
+                  alguien no cierra caja, su jornada queda marcada como “Sin salida”.
                 </p>
               </div>
             </div>
