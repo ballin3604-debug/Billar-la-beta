@@ -43,6 +43,7 @@ interface AppContextValue {
   settings: Settings | null;
   tables: AppState['tables'];
   products: AppState['products'];
+  customerTabs: AppState['customerTabs'];
   currentShift: AppState['currentShift'];
   attendanceToday: StaffAttendance | null;
   users: User[];
@@ -70,7 +71,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 const DEFAULT_STATUS: AuthStatus = {
   ok: true,
-  businessName: 'Billar & Bar',
+  businessName: 'Billar Bar la Beta',
   needsSetup: false,
   version: '0.9.0',
 };
@@ -82,12 +83,13 @@ function isTab(value: string | null): value is Tab {
     value === 'historial' ||
     value === 'ajustes' ||
     value === 'egresos' ||
-    value === 'cierre'
+    value === 'cierre' ||
+    value === 'ventas'
   );
 }
 
 const ADMIN_TABS: Tab[] = ['mesas', 'caja', 'historial', 'ajustes'];
-const CASHIER_TABS: Tab[] = ['mesas', 'egresos', 'cierre'];
+const CASHIER_TABS: Tab[] = ['mesas', 'ventas', 'egresos', 'cierre'];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -376,6 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       settings: state?.settings ?? null,
       tables: state?.tables ?? [],
       products: state?.products ?? [],
+      customerTabs: state?.customerTabs ?? [],
       currentShift: state?.currentShift ?? null,
       attendanceToday: state?.attendanceToday ?? null,
       users: state?.users ?? [],

@@ -81,7 +81,7 @@
   }
 
   .label {
-    @apply mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400;
+    @apply mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400;
   }
 
   .btn-primary {
@@ -109,7 +109,7 @@
   }
 
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0a1320] px-2.5 py-1.5 text-[11px] font-semibold text-slate-400 transition-colors hover:border-slate-700 hover:text-slate-200;
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-[#0a1320] px-2.5 py-1.5 text-xs font-semibold text-slate-400 transition-colors hover:border-slate-700 hover:text-slate-200;
   }
 
   .chip-active {
@@ -134,8 +134,36 @@
     box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
   }
 
+  /* Identificación visual de mesas: cada mesa define --table-color en línea. */
+  .table-accent {
+    background-color: var(--table-color, #3b82f6);
+  }
+
+  .table-border {
+    border-color: color-mix(in srgb, var(--table-color, #3b82f6) 42%, #1e293b);
+  }
+
+  .table-tint {
+    background-image: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--table-color, #3b82f6) 15%, #101d2b),
+      #0b1422 68%
+    );
+  }
+
+  .table-badge {
+    border: 1px solid color-mix(in srgb, var(--table-color, #3b82f6) 48%, transparent);
+    background-color: color-mix(in srgb, var(--table-color, #3b82f6) 16%, transparent);
+    color: color-mix(in srgb, var(--table-color, #3b82f6) 58%, white);
+  }
+
+  .table-dot {
+    background-color: var(--table-color, #3b82f6);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--table-color, #3b82f6) 22%, transparent);
+  }
+
   .table-head {
-    @apply bg-[#08111d] text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500;
+    @apply bg-[#08111d] text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500;
   }
 
   .data-table {
@@ -197,6 +225,23 @@
   animation: popIn 160ms ease-out both;
 }
 
+/*
+ * Legibilidad: las utilidades arbitrarias de Tailwind permiten tamaños de
+ * 8 px a 10 px que resultan demasiado pequeños en pantalla y al imprimir.
+ * Estas reglas elevan el mínimo sin tocar la jerarquía del diseño.
+ * 9 px o menos -> 11 px; 10 px y 11 px -> 12 px.
+ */
+[class~="text-[8px]"],
+[class~="text-[8.5px]"],
+[class~="text-[9px]"] {
+  font-size: 11px;
+}
+
+[class~="text-[10px]"],
+[class~="text-[11px]"] {
+  font-size: 12px;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -229,6 +274,35 @@
     background: #fff !important;
     color: #0f172a !important;
     box-shadow: none !important;
+    font-size: 10pt;
+    line-height: 1.45;
+  }
+
+  /*
+   * El detalle impreso debe leerse sin esfuerzo: se agrandan los textos
+   * pequeños de la planilla y de los reportes por encima del tamaño de
+   * pantalla. Las tablas usan 9,5 pt y el cuerpo 10 pt.
+   */
+  .print-area [class~="text-[8px]"],
+  .print-area [class~="text-[8.5px]"],
+  .print-area [class~="text-[9px]"],
+  .print-area [class~="text-[9.5px]"] {
+    font-size: 9.5pt !important;
+  }
+
+  .print-area [class~="text-[10px]"],
+  .print-area [class~="text-[11px]"] {
+    font-size: 10pt !important;
+  }
+
+  .print-area h1 {
+    font-size: 17pt !important;
+    line-height: 1.15;
+  }
+
+  .print-area h2 {
+    font-size: 11pt !important;
+    margin-bottom: 4px;
   }
 
   .no-print,
@@ -286,13 +360,15 @@
   .print-area table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 8.5pt;
+    font-size: 9.5pt;
+    line-height: 1.4;
   }
 
   .print-area th,
   .print-area td {
     border-bottom: 1px solid #e2e8f0 !important;
-    padding: 4px 6px !important;
+    padding: 6px 7px !important;
+    vertical-align: top;
   }
 
   .print-area .print-break {

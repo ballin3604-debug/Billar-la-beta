@@ -16,20 +16,33 @@ import {
   listBackups,
   logAudit,
   localDateKey,
+  isTableColor,
+  pickTableColor,
 } from './database.mjs';
+import {
+  buildReceiptEscPos,
+  buildTestEscPos,
+  listPrinters,
+  printRaw,
+} from './print-raw.mjs';
 import {
   HttpError,
   round2,
   buildState,
   getShiftDetail,
   getCashierShiftDetail,
+  getSaleDetail,
   getHistory,
   getOpenShiftRow,
   getOpenSessionForTable,
   getSessionItems,
+  getCustomerTabItems,
   itemsTotal,
   computeSessionCost,
   normalizePayment,
+  normalizePlayerType,
+  applyPlayerTypeDiscount,
+  playerTypeLabel,
   publicUser,
   getAttendance,
   recordStaffCheckIn,
@@ -44,6 +57,7 @@ const loginAttempts = new Map();
 
 const EXPENSE_CATEGORIES = new Set(['comida', 'personal', 'compras', 'servicios', 'otro']);
 const PRODUCT_CATEGORIES = new Set(['cervezas', 'bebidas', 'snacks', 'multas', 'otros']);
+const TRANSFER_DIRECTIONS = new Set(['qr_to_cash', 'cash_to_qr']);
 
 function clientIp(req) {
   return req.ip || req.socket?.remoteAddress || 'local';
@@ -112,6 +126,15 @@ function requireOpenSession(tableId, shiftId) {
   return session;
 }
 
+function ensureSessionEditable(session) {
+  if (session.checkout_started_at) {
+    throw new HttpError(
+      409,
+      'El cobro de esta mesa está en curso. Cancela el cobro para modificar el consumo.'
+    );
+  }
+}
+
 function numberField(value, label, { min = 0, max = 10000000 } = {}) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
@@ -126,6 +149,14 @@ function textField(value, label, min = 1, max = 120) {
     throw new HttpError(400, `${label} debe tener entre ${min} y ${max} caracteres.`);
   }
   return text;
+}
+
+function tableColorField(value) {
+  const color = String(value ?? '').trim();
+  if (!isTableColor(color)) {
+    throw new HttpError(400, 'El color de la mesa no es válido.');
+  }
+  return color;
 }
 
 function takeStock(product, quantity) {
@@ -289,6 +320,23 @@ export function createApiRouter() {
       });
     }
 
+    for (const closed of attendance.closed || []) {
+      logAudit({
+        user,
+        action: 'staff_check_out',
+        entityType: 'user',
+        entityId: user.id,
+        shiftId: closed.shiftId ?? null,
+        details: {
+          checkInAt: closed.checkInAt,
+          checkOutAt: closed.checkOutAt,
+          auto: true,
+          reason: 'Cierre automático de una jornada anterior sin salida',
+        },
+        ip,
+      });
+    }
+
     const token = issueToken(user);
     logAudit({
       user,
@@ -311,6 +359,27 @@ export function createApiRouter() {
 
   router.post('/auth/logout', authRequired, (req, res) => {
     const shift = getOpenShiftRow();
+    const attendance = recordStaffCheckOut({
+      user: req.user,
+      shift,
+      ip: req.ipAddress,
+      createIfMissing: false,
+    });
+    if (attendance) {
+      logAudit({
+        user: req.user,
+        action: 'staff_check_out',
+        entityType: 'user',
+        entityId: req.user.id,
+        shiftId: shift?.id ?? null,
+        details: {
+          checkInAt: attendance.checkInAt,
+          checkOutAt: attendance.checkOutAt,
+          reason: 'Cierre de sesión',
+        },
+        ip: req.ipAddress,
+      });
+    }
     logAudit({
       user: req.user,
       action: 'logout',
@@ -389,11 +458,14 @@ export function createApiRouter() {
     res.json({ ok: true, shift });
   });
 
-  router.post('/shifts/open', authRequired, adminRequired, (req, res) => {
+  router.post('/shifts/open', authRequired, (req, res) => {
     if (getOpenShiftRow()) {
       throw new HttpError(409, 'Ya hay una caja abierta. Ciérrala antes de abrir otra.');
     }
-    const initialCash = round2(numberField(req.body?.initialCash ?? 0, 'El fondo inicial', { max: 1000000 }));
+    const settings = getSettings();
+    // El fondo inicial es fijo para todos los usuarios. Solo se cambia
+    // desde Ajustes > Informacion general.
+    const initialCash = round2(Number(settings.defaultInitialCash || 0));
     const openedAt = nowIso();
 
     const result = transaction(() => {
@@ -538,18 +610,20 @@ export function createApiRouter() {
     if (getOpenSessionForTable(tableId)) {
       throw new HttpError(409, 'La mesa ya está ocupada.');
     }
+    const playerType = normalizePlayerType(req.body?.playerType);
     const startTime = nowIso();
     const inserted = transaction(() => {
       const result = run(
         `INSERT INTO sessions
-         (shift_id, table_id, opened_by, opened_by_name, start_time, rate_per_hour, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'open')`,
+         (shift_id, table_id, opened_by, opened_by_name, start_time, rate_per_hour, player_type, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`,
         shift.id,
         table.id,
         req.user.id,
         req.user.name,
         startTime,
-        table.rate_per_hour
+        table.rate_per_hour,
+        playerType
       );
       return Number(result.lastInsertRowid);
     });
@@ -560,14 +634,20 @@ export function createApiRouter() {
       entityType: 'session',
       entityId: inserted,
       shiftId: shift.id,
-      details: { table: table.name, ratePerHour: table.rate_per_hour },
+      details: { table: table.name, ratePerHour: table.rate_per_hour, playerType },
       ip: req.ipAddress,
     });
 
+    const typeNote =
+      playerType === 'staff'
+        ? ' (encargados, sin cobro de mesa)'
+        : playerType === 'mixed'
+        ? ' (encargado + cliente, 50% de mesa)'
+        : '';
     res.json({
       ok: true,
       state: publicState(req),
-      message: `${table.name} iniciada.`,
+      message: `${table.name} iniciada${typeNote}.`,
     });
   });
 
@@ -576,6 +656,7 @@ export function createApiRouter() {
     const tableId = parsePositiveId(req.params.id, 'mesa');
     const table = requireTable(tableId);
     const session = requireOpenSession(tableId, shift.id);
+    ensureSessionEditable(session);
     const productId = parsePositiveId(req.body?.productId, 'producto');
     const quantity = Math.floor(Number(req.body?.quantity ?? 1));
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
@@ -638,6 +719,7 @@ export function createApiRouter() {
     const tableId = parsePositiveId(req.params.id, 'mesa');
     const table = requireTable(tableId);
     const session = requireOpenSession(tableId, shift.id);
+    ensureSessionEditable(session);
     const itemId = parsePositiveId(req.params.itemId, 'ítem');
     const item = get(
       'SELECT * FROM session_items WHERE id = ? AND session_id = ?',
@@ -672,6 +754,120 @@ export function createApiRouter() {
     });
   });
 
+  router.post('/tables/:id/checkout/start', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tableId = parsePositiveId(req.params.id, 'mesa');
+    const table = requireTable(tableId);
+    const session = requireOpenSession(tableId, shift.id);
+    let checkoutStartedAt = session.checkout_started_at;
+    let frozenNow = false;
+
+    if (!checkoutStartedAt) {
+      const startedAt = nowIso();
+      const result = run(
+        `UPDATE sessions
+         SET checkout_started_at = ?
+         WHERE id = ? AND status = 'open' AND checkout_started_at IS NULL`,
+        startedAt,
+        session.id
+      );
+      const updated = get(
+        'SELECT checkout_started_at FROM sessions WHERE id = ?',
+        session.id
+      );
+      checkoutStartedAt = updated?.checkout_started_at || startedAt;
+      frozenNow = result.changes > 0;
+
+      if (frozenNow) {
+        logAudit({
+          user: req.user,
+          action: 'table_checkout_start',
+          entityType: 'session',
+          entityId: session.id,
+          shiftId: shift.id,
+          details: { table: table.name, checkoutStartedAt },
+          ip: req.ipAddress,
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      ...(frozenNow
+        ? { message: `Tiempo detenido. El cobro de ${table.name} quedó congelado.` }
+        : {}),
+    });
+  });
+
+  router.post('/tables/:id/checkout/cancel', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tableId = parsePositiveId(req.params.id, 'mesa');
+    const table = requireTable(tableId);
+    const session = requireOpenSession(tableId, shift.id);
+
+    if (!session.checkout_started_at) {
+      return res.json({ ok: true, state: publicState(req) });
+    }
+
+    const startedMs = new Date(session.checkout_started_at).getTime();
+    const pausedSeconds = Number.isFinite(startedMs)
+      ? Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
+      : 0;
+
+    transaction(() => {
+      run(
+        `UPDATE sessions
+         SET paused_seconds = COALESCE(paused_seconds, 0) + ?,
+             checkout_started_at = NULL
+         WHERE id = ?`,
+        pausedSeconds,
+        session.id
+      );
+    });
+
+    logAudit({
+      user: req.user,
+      action: 'table_checkout_cancel',
+      entityType: 'session',
+      entityId: session.id,
+      shiftId: shift.id,
+      details: { table: table.name, pausedSeconds },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: `Cobro cancelado. El tiempo de ${table.name} se reanudó.`,
+    });
+  });
+
+  router.patch('/tables/:id/note', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tableId = parsePositiveId(req.params.id, 'mesa');
+    const table = requireTable(tableId);
+    const session = requireOpenSession(tableId, shift.id);
+    const note = String(req.body?.note ?? '').trim().slice(0, 300);
+
+    run('UPDATE sessions SET notes = ? WHERE id = ?', note || null, session.id);
+
+    logAudit({
+      user: req.user,
+      action: 'table_note_update',
+      entityType: 'session',
+      entityId: session.id,
+      shiftId: shift.id,
+      details: { table: table.name, hasNote: Boolean(note) },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+    });
+  });
+
   router.post('/tables/:id/charge', authRequired, (req, res) => {
     const shift = requireOpenShift();
     const tableId = parsePositiveId(req.params.id, 'mesa');
@@ -680,21 +876,27 @@ export function createApiRouter() {
     const settings = getSettings();
     const items = getSessionItems(session.id);
     const productsAmount = itemsTotal(items);
+    const endTime = session.checkout_started_at || nowIso();
+    const endMs = new Date(endTime).getTime();
     const computed = computeSessionCost(
       session.start_time,
       session.rate_per_hour,
-      settings.minimumPlayCharge
+      settings.minimumPlayCharge,
+      Number.isFinite(endMs) ? endMs : Date.now(),
+      session.paused_seconds
     );
 
-    let billiardAmount = computed.cost;
+    const playerType = normalizePlayerType(session.player_type);
+    let baseBilliard = computed.cost;
     let manualAdjustment = false;
     if (req.body?.billiardAmount !== undefined && req.body?.billiardAmount !== null && req.body?.billiardAmount !== '') {
       if (req.user.role !== 'admin') {
         throw new HttpError(403, 'Solo el administrador puede modificar el monto del billar.');
       }
-      billiardAmount = round2(numberField(req.body.billiardAmount, 'El monto de billar'));
-      manualAdjustment = Math.abs(billiardAmount - computed.cost) > 0.009;
+      baseBilliard = round2(numberField(req.body.billiardAmount, 'El monto de billar'));
+      manualAdjustment = Math.abs(baseBilliard - computed.cost) > 0.009;
     }
+    const billiardAmount = applyPlayerTypeDiscount(baseBilliard, playerType);
 
     const totalAmount = round2(billiardAmount + productsAmount);
     const payment = normalizePayment(
@@ -704,8 +906,8 @@ export function createApiRouter() {
       req.body?.qrAmount,
       req.body?.qrReference
     );
-    const notes = String(req.body?.notes ?? '').trim().slice(0, 300) || null;
-    const endTime = nowIso();
+    const noteInput = String(req.body?.notes ?? '').trim().slice(0, 300);
+    const notes = noteInput || String(session.notes || '').trim().slice(0, 300) || null;
     const itemNumber = (get(
       'SELECT COUNT(*) AS count FROM plays WHERE shift_id = ? AND table_id = ?',
       shift.id,
@@ -719,8 +921,8 @@ export function createApiRouter() {
           opened_by, opened_by_name, closed_by, closed_by_name, start_time, end_time,
           duration_minutes, billiard_amount, computed_billiard_amount, products_amount,
           total_amount, payment_method, cash_amount, qr_amount, qr_reference, notes,
-          status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+          player_type, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
         shift.id,
         session.id,
         table.id,
@@ -743,11 +945,12 @@ export function createApiRouter() {
         payment.qrAmount,
         payment.qrReference,
         notes,
+        playerType,
         endTime
       );
       const insertedId = Number(result.lastInsertRowid);
       run(
-        "UPDATE sessions SET status = 'charged', closed_at = ?, closed_by = ?, closed_by_name = ? WHERE id = ?",
+        "UPDATE sessions SET status = 'charged', closed_at = ?, closed_by = ?, closed_by_name = ?, checkout_started_at = NULL WHERE id = ?",
         endTime,
         req.user.id,
         req.user.name,
@@ -768,6 +971,7 @@ export function createApiRouter() {
         computedBilliard: computed.cost,
         billiardAmount,
         manualAdjustment,
+        playerType,
         products: summarizeItems(items),
         productsAmount,
         totalAmount,
@@ -823,7 +1027,7 @@ export function createApiRouter() {
     });
   });
 
-  router.post('/sales', authRequired, adminRequired, (req, res) => {
+  router.post('/sales', authRequired, (req, res) => {
     const shift = requireOpenShift();
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
     if (rawItems.length === 0) throw new HttpError(400, 'La venta no tiene productos.');
@@ -918,7 +1122,294 @@ export function createApiRouter() {
     res.json({
       ok: true,
       state: publicState(req),
+      sale: getSaleDetail(saleId),
       message: `Venta registrada: ${totalAmount} ${settings.currency}.`,
+    });
+  });
+
+  router.post('/customer-tabs', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const customerName = textField(req.body?.customerName, 'El nombre del cliente', 2, 60);
+    const createdAt = nowIso();
+
+    const result = run(
+      `INSERT INTO customer_tabs
+       (shift_id, opened_by, opened_by_name, created_at, customer_name, status)
+       VALUES (?, ?, ?, ?, ?, 'open')`,
+      shift.id,
+      req.user.id,
+      req.user.name,
+      createdAt,
+      customerName
+    );
+    const tabId = Number(result.lastInsertRowid);
+
+    logAudit({
+      user: req.user,
+      action: 'customer_tab_open',
+      entityType: 'customer_tab',
+      entityId: tabId,
+      shiftId: shift.id,
+      details: { customerName },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: `Cuenta abierta para ${customerName}.`,
+    });
+  });
+
+  router.post('/customer-tabs/:id/items', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tabId = parsePositiveId(req.params.id, 'cuenta');
+    const tab = get('SELECT * FROM customer_tabs WHERE id = ?', tabId);
+    if (!tab) throw new HttpError(404, 'La cuenta no existe.');
+    if (tab.shift_id !== shift.id || tab.status !== 'open') {
+      throw new HttpError(409, 'Esta cuenta ya no está abierta.');
+    }
+
+    const productId = parsePositiveId(req.body?.productId, 'producto');
+    const quantity = Math.floor(Number(req.body?.quantity ?? 1));
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
+      throw new HttpError(400, 'La cantidad debe estar entre 1 y 50.');
+    }
+    const product = get('SELECT * FROM products WHERE id = ?', productId);
+    if (!product || !product.active) {
+      throw new HttpError(404, 'El producto no está disponible.');
+    }
+
+    transaction(() => {
+      const existing = get(
+        'SELECT * FROM customer_tab_items WHERE tab_id = ? AND product_id = ? LIMIT 1',
+        tabId,
+        product.id
+      );
+      takeStock(product, quantity);
+      if (existing) {
+        run(
+          'UPDATE customer_tab_items SET quantity = quantity + ? WHERE id = ?',
+          quantity,
+          existing.id
+        );
+      } else {
+        run(
+          `INSERT INTO customer_tab_items
+           (tab_id, product_id, name, price, quantity, created_by, created_by_name, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          tabId,
+          product.id,
+          product.name,
+          product.price,
+          quantity,
+          req.user.id,
+          req.user.name,
+          nowIso()
+        );
+      }
+    });
+
+    logAudit({
+      user: req.user,
+      action: 'customer_tab_item_add',
+      entityType: 'customer_tab',
+      entityId: tabId,
+      shiftId: shift.id,
+      details: { customerName: tab.customer_name, product: product.name, quantity, price: product.price },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: `${quantity}× ${product.name} agregado a ${tab.customer_name}.`,
+    });
+  });
+
+  router.delete('/customer-tabs/:id/items/:itemId', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tabId = parsePositiveId(req.params.id, 'cuenta');
+    const tab = get('SELECT * FROM customer_tabs WHERE id = ?', tabId);
+    if (!tab) throw new HttpError(404, 'La cuenta no existe.');
+    if (tab.shift_id !== shift.id || tab.status !== 'open') {
+      throw new HttpError(409, 'Esta cuenta ya no está abierta.');
+    }
+
+    const itemId = parsePositiveId(req.params.itemId, 'ítem');
+    const item = get(
+      'SELECT * FROM customer_tab_items WHERE id = ? AND tab_id = ?',
+      itemId,
+      tabId
+    );
+    if (!item) throw new HttpError(404, 'Ese producto ya no está en la cuenta.');
+
+    transaction(() => {
+      if (item.quantity > 1) {
+        run('UPDATE customer_tab_items SET quantity = quantity - 1 WHERE id = ?', item.id);
+      } else {
+        run('DELETE FROM customer_tab_items WHERE id = ?', item.id);
+      }
+      restoreStock(item.product_id, 1);
+    });
+
+    logAudit({
+      user: req.user,
+      action: 'customer_tab_item_remove',
+      entityType: 'customer_tab',
+      entityId: tabId,
+      shiftId: shift.id,
+      details: { customerName: tab.customer_name, product: item.name, quantity: 1 },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: `Se quitó 1× ${item.name} de ${tab.customer_name}.`,
+    });
+  });
+
+  router.post('/customer-tabs/:id/charge', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tabId = parsePositiveId(req.params.id, 'cuenta');
+    const tab = get('SELECT * FROM customer_tabs WHERE id = ?', tabId);
+    if (!tab) throw new HttpError(404, 'La cuenta no existe.');
+    if (tab.shift_id !== shift.id || tab.status !== 'open') {
+      throw new HttpError(409, 'Esta cuenta ya no está abierta.');
+    }
+
+    const items = getCustomerTabItems(tabId);
+    if (items.length === 0) {
+      throw new HttpError(400, 'La cuenta no tiene productos para cobrar.');
+    }
+
+    const totalAmount = round2(
+      items.reduce((sum, item) => sum + Number(item.price) * Number(item.quantity), 0)
+    );
+    if (totalAmount <= 0) {
+      throw new HttpError(400, 'El total de la cuenta debe ser mayor a cero.');
+    }
+
+    const payment = normalizePayment(
+      totalAmount,
+      req.body?.paymentMethod,
+      req.body?.cashAmount,
+      req.body?.qrAmount,
+      req.body?.qrReference
+    );
+    const notes = String(req.body?.notes ?? '').trim().slice(0, 300) || null;
+    const createdAt = nowIso();
+    const settings = getSettings();
+
+    const saleId = transaction(() => {
+      const result = run(
+        `INSERT INTO sales
+         (shift_id, created_by, created_by_name, created_at, total_amount, payment_method,
+          cash_amount, qr_amount, qr_reference, notes, customer_name, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+        shift.id,
+        req.user.id,
+        req.user.name,
+        createdAt,
+        totalAmount,
+        payment.paymentMethod,
+        payment.cashAmount,
+        payment.qrAmount,
+        payment.qrReference,
+        notes,
+        tab.customer_name
+      );
+      const insertedId = Number(result.lastInsertRowid);
+      for (const item of items) {
+        run(
+          `INSERT INTO sale_items (sale_id, product_id, name, price, quantity)
+           VALUES (?, ?, ?, ?, ?)`,
+          insertedId,
+          item.productId,
+          item.name,
+          item.price,
+          item.quantity
+        );
+      }
+      run(
+        `UPDATE customer_tabs
+         SET status = 'charged', charged_at = ?, closed_by = ?, closed_by_name = ?, sale_id = ?, notes = ?
+         WHERE id = ?`,
+        createdAt,
+        req.user.id,
+        req.user.name,
+        insertedId,
+        notes,
+        tabId
+      );
+      return insertedId;
+    });
+
+    logAudit({
+      user: req.user,
+      action: 'customer_tab_charge',
+      entityType: 'customer_tab',
+      entityId: tabId,
+      shiftId: shift.id,
+      details: {
+        customerName: tab.customer_name,
+        saleId,
+        items: items.map((item) => `${item.quantity}x ${item.name}`).join(', '),
+        totalAmount,
+        paymentMethod: payment.paymentMethod,
+        cashAmount: payment.cashAmount,
+        qrAmount: payment.qrAmount,
+      },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      sale: getSaleDetail(saleId),
+      message: `Cuenta de ${tab.customer_name} cobrada: ${totalAmount} ${settings.currency}.`,
+    });
+  });
+
+  router.post('/customer-tabs/:id/cancel', authRequired, adminRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const tabId = parsePositiveId(req.params.id, 'cuenta');
+    const tab = get('SELECT * FROM customer_tabs WHERE id = ?', tabId);
+    if (!tab) throw new HttpError(404, 'La cuenta no existe.');
+    if (tab.shift_id !== shift.id) throw new HttpError(409, 'No se puede modificar un turno cerrado.');
+    if (tab.status !== 'open') throw new HttpError(409, 'Esta cuenta ya no está abierta.');
+    const reason = textField(req.body?.reason, 'El motivo de anulación', 3, 200);
+
+    const items = getCustomerTabItems(tabId);
+    transaction(() => {
+      for (const item of items) restoreStock(item.productId, item.quantity);
+      run(
+        `UPDATE customer_tabs
+         SET status = 'cancelled', charged_at = ?, closed_by = ?, closed_by_name = ?, notes = ?
+         WHERE id = ?`,
+        nowIso(),
+        req.user.id,
+        req.user.name,
+        reason,
+        tabId
+      );
+    });
+
+    logAudit({
+      user: req.user,
+      action: 'customer_tab_cancel',
+      entityType: 'customer_tab',
+      entityId: tabId,
+      shiftId: shift.id,
+      details: { customerName: tab.customer_name, reason, items: items.map((item) => `${item.quantity}x ${item.name}`).join(', ') },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: `Cuenta de ${tab.customer_name} anulada. Quedó registrada en auditoría.`,
     });
   });
 
@@ -938,22 +1429,28 @@ export function createApiRouter() {
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
         throw new HttpError(400, `La cantidad del producto #${position} no es válida.`);
       }
-      const unitPrice = round2(
-        numberField(rawItem?.unitPrice, `El costo unitario del producto #${position}`, {
-          min: 0.01,
-          max: 1000000,
-        })
-      );
       let productId = null;
       let product = null;
       if (rawItem?.productId !== null && rawItem?.productId !== undefined && rawItem?.productId !== '') {
         productId = parsePositiveId(rawItem.productId, `producto del gasto #${position}`);
-        product = get('SELECT id, name FROM products WHERE id = ?', productId);
+        product = get('SELECT id, name, price FROM products WHERE id = ?', productId);
         if (!product) {
           throw new HttpError(400, `El producto #${position} no existe en el catálogo.`);
         }
       }
-      const name = textField(rawItem?.name ?? product?.name, `El nombre del producto #${position}`, 1, 80);
+      // El costo de un producto del inventario se toma del catálogo y no
+      // se acepta el valor enviado por el cliente.
+      const unitPrice = product
+        ? round2(Number(product.price))
+        : round2(
+            numberField(rawItem?.unitPrice, `El costo unitario del producto #${position}`, {
+              min: 0.01,
+              max: 1000000,
+            })
+          );
+      const name = product
+        ? product.name
+        : textField(rawItem?.name, `El nombre del producto #${position}`, 1, 80);
       return {
         productId,
         name,
@@ -1019,6 +1516,97 @@ export function createApiRouter() {
       ok: true,
       state: publicState(req),
       message: `Gasto registrado: ${amount} ${getSettings().currency}.`,
+    });
+  });
+
+  router.post('/transfers', authRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const direction = String(req.body?.direction ?? '');
+    if (!TRANSFER_DIRECTIONS.has(direction)) {
+      throw new HttpError(400, 'El sentido del traspaso no es válido.');
+    }
+    const amount = round2(
+      numberField(req.body?.amount, 'El monto del traspaso', { min: 0.01, max: 1000000 })
+    );
+    const concept = textField(req.body?.concept, 'El concepto del traspaso', 2, 120);
+    const reference = String(req.body?.reference ?? '').trim().slice(0, 80) || null;
+    const createdAt = nowIso();
+
+    const inserted = run(
+      `INSERT INTO cash_transfers
+       (shift_id, created_by, created_by_name, created_at, direction, amount, concept, reference, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+      shift.id,
+      req.user.id,
+      req.user.name,
+      createdAt,
+      direction,
+      amount,
+      concept,
+      reference
+    );
+    const transferId = Number(inserted.lastInsertRowid);
+
+    logAudit({
+      user: req.user,
+      action: 'cash_transfer_create',
+      entityType: 'cash_transfer',
+      entityId: transferId,
+      shiftId: shift.id,
+      details: { direction, amount, concept, reference },
+      ip: req.ipAddress,
+    });
+
+    const currency = getSettings().currency;
+    const message = direction === 'qr_to_cash'
+      ? `Traspaso registrado: recibiste ${amount} ${currency} por QR y entregaste ${amount} ${currency} en efectivo.`
+      : `Traspaso registrado: recibiste ${amount} ${currency} en efectivo y entregaste ${amount} ${currency} por QR.`;
+
+    res.json({ ok: true, state: publicState(req), message });
+  });
+
+  router.post('/transfers/:id/void', authRequired, adminRequired, (req, res) => {
+    const shift = requireOpenShift();
+    const transferId = parsePositiveId(req.params.id, 'traspaso');
+    const reason = textField(req.body?.reason, 'El motivo de anulación', 3, 200);
+    const transfer = get('SELECT * FROM cash_transfers WHERE id = ?', transferId);
+    if (!transfer) throw new HttpError(404, 'El traspaso no existe.');
+    if (transfer.shift_id !== shift.id) {
+      throw new HttpError(409, 'No se puede modificar un turno cerrado.');
+    }
+    if (transfer.status !== 'active') {
+      throw new HttpError(409, 'Este traspaso ya fue anulado.');
+    }
+
+    run(
+      `UPDATE cash_transfers SET status = 'voided', voided_by = ?, voided_by_name = ?,
+       voided_at = ?, void_reason = ? WHERE id = ?`,
+      req.user.id,
+      req.user.name,
+      nowIso(),
+      reason,
+      transferId
+    );
+
+    logAudit({
+      user: req.user,
+      action: 'cash_transfer_void',
+      entityType: 'cash_transfer',
+      entityId: transferId,
+      shiftId: shift.id,
+      details: {
+        direction: transfer.direction,
+        amount: transfer.amount,
+        concept: transfer.concept,
+        reason,
+      },
+      ip: req.ipAddress,
+    });
+
+    res.json({
+      ok: true,
+      state: publicState(req),
+      message: 'Traspaso anulado y registrado en auditoría.',
     });
   });
 
@@ -1316,6 +1904,7 @@ export function createApiRouter() {
       : product.stock;
     const favorite = req.body?.favorite !== undefined ? (req.body.favorite ? 1 : 0) : product.favorite;
     const active = req.body?.active !== undefined ? (req.body.active ? 1 : 0) : product.active;
+    const priceChanged = Number(product.price) !== Number(price);
 
     run(
       `UPDATE products SET name = ?, category = ?, price = ?, stock = ?, favorite = ?, active = ?
@@ -1331,11 +1920,13 @@ export function createApiRouter() {
 
     logAudit({
       user: req.user,
-      action: 'product_update',
+      action: priceChanged ? 'price_change' : 'product_update',
       entityType: 'product',
       entityId: productId,
       shiftId: getOpenShiftRow()?.id ?? null,
       details: {
+        kind: 'product',
+        name,
         before: {
           name: product.name,
           category: product.category,
@@ -1345,6 +1936,9 @@ export function createApiRouter() {
           active: Boolean(product.active),
         },
         after: { name, category, price, stock, favorite: Boolean(favorite), active: Boolean(active) },
+        ...(priceChanged
+          ? { price: { before: product.price, after: price } }
+          : {}),
       },
       ip: req.ipAddress,
     });
@@ -1355,13 +1949,15 @@ export function createApiRouter() {
   router.post('/admin/tables', authRequired, adminRequired, (req, res) => {
     const name = textField(req.body?.name, 'El nombre de la mesa', 2, 40);
     const rate = round2(numberField(req.body?.ratePerHour, 'La tarifa', { min: 0, max: 100000 }));
+    const color = req.body?.color !== undefined ? tableColorField(req.body.color) : pickTableColor();
     const maxNumber = get('SELECT COALESCE(MAX(number), 0) AS number FROM tables')?.number || 0;
 
     const inserted = run(
-      'INSERT INTO tables (number, name, rate_per_hour, active, created_at) VALUES (?, ?, ?, 1, ?)',
+      'INSERT INTO tables (number, name, rate_per_hour, color, active, created_at) VALUES (?, ?, ?, ?, 1, ?)',
       maxNumber + 1,
       name,
       rate,
+      color,
       nowIso()
     );
 
@@ -1371,7 +1967,7 @@ export function createApiRouter() {
       entityType: 'table',
       entityId: Number(inserted.lastInsertRowid),
       shiftId: getOpenShiftRow()?.id ?? null,
-      details: { name, ratePerHour: rate },
+      details: { name, ratePerHour: rate, color },
       ip: req.ipAddress,
     });
 
@@ -1389,29 +1985,46 @@ export function createApiRouter() {
     const rate = req.body?.ratePerHour !== undefined
       ? round2(numberField(req.body.ratePerHour, 'La tarifa', { min: 0, max: 100000 }))
       : table.rate_per_hour;
+    const color = req.body?.color !== undefined
+      ? tableColorField(req.body.color)
+      : isTableColor(table.color)
+      ? table.color
+      : 'blue';
     const active = req.body?.active !== undefined ? (req.body.active ? 1 : 0) : table.active;
+    const rateChanged = Number(table.rate_per_hour) !== Number(rate);
 
     if (!active && getOpenSessionForTable(tableId)) {
       throw new HttpError(409, 'No puedes desactivar una mesa que está ocupada.');
     }
 
     run(
-      'UPDATE tables SET name = ?, rate_per_hour = ?, active = ? WHERE id = ?',
+      'UPDATE tables SET name = ?, rate_per_hour = ?, color = ?, active = ? WHERE id = ?',
       name,
       rate,
+      color,
       active,
       tableId
     );
 
     logAudit({
       user: req.user,
-      action: 'table_update',
+      action: rateChanged ? 'price_change' : 'table_update',
       entityType: 'table',
       entityId: tableId,
       shiftId: getOpenShiftRow()?.id ?? null,
       details: {
-        before: { name: table.name, ratePerHour: table.rate_per_hour, active: Boolean(table.active) },
-        after: { name, ratePerHour: rate, active: Boolean(active) },
+        kind: 'table',
+        name,
+        before: {
+          name: table.name,
+          ratePerHour: table.rate_per_hour,
+          color: table.color,
+          active: Boolean(table.active),
+        },
+        after: { name, ratePerHour: rate, color, active: Boolean(active) },
+        ...(rateChanged
+          ? { ratePerHour: { before: table.rate_per_hour, after: rate } }
+          : {}),
       },
       ip: req.ipAddress,
     });
@@ -1439,20 +2052,68 @@ export function createApiRouter() {
         numberField(req.body.minimumPlayCharge, 'El cobro mínimo', { min: 0, max: 10000 })
       );
     }
+    if (req.body?.defaultInitialCash !== undefined) {
+      patch.defaultInitialCash = round2(
+        numberField(req.body.defaultInitialCash, 'La caja inicial', { min: 0, max: 1000000 })
+      );
+    }
     if (req.body?.autoLockMinutes !== undefined) {
       patch.autoLockMinutes = Math.floor(
         numberField(req.body.autoLockMinutes, 'El bloqueo automático', { min: 0, max: 240 })
       );
     }
+    if (req.body?.receiptPromotions !== undefined) {
+      patch.receiptPromotions = String(req.body.receiptPromotions ?? '').trim().slice(0, 600);
+    }
+    if (req.body?.thermalPrinterName !== undefined) {
+      const name = String(req.body.thermalPrinterName ?? '').trim().slice(0, 120);
+      if (/[\x00-\x1F\x7F]/.test(name)) {
+        throw new HttpError(400, 'El nombre de la impresora contiene caracteres no válidos.');
+      }
+      patch.thermalPrinterName = name;
+    }
+    if (req.body?.rawPrintingEnabled !== undefined) {
+      const value = req.body.rawPrintingEnabled;
+      if (typeof value === 'boolean') {
+        patch.rawPrintingEnabled = value;
+      } else if (value === 'true' || value === '1' || value === 1) {
+        patch.rawPrintingEnabled = true;
+      } else if (value === 'false' || value === '0' || value === 0) {
+        patch.rawPrintingEnabled = false;
+      } else {
+        throw new HttpError(400, 'El valor de impresión directa (RAW) no es válido.');
+      }
+    }
 
     const after = saveSettings(patch);
+    const priceChanged =
+      Number(before.defaultRatePerHour) !== Number(after.defaultRatePerHour) ||
+      Number(before.minimumPlayCharge) !== Number(after.minimumPlayCharge);
     logAudit({
       user: req.user,
-      action: 'settings_update',
+      action: priceChanged ? 'price_change' : 'settings_update',
       entityType: 'settings',
       entityId: 'general',
       shiftId: getOpenShiftRow()?.id ?? null,
-      details: { before, after },
+      details: {
+        kind: 'settings',
+        before,
+        after,
+        ...(priceChanged
+          ? {
+              prices: {
+                before: {
+                  defaultRatePerHour: before.defaultRatePerHour,
+                  minimumPlayCharge: before.minimumPlayCharge,
+                },
+                after: {
+                  defaultRatePerHour: after.defaultRatePerHour,
+                  minimumPlayCharge: after.minimumPlayCharge,
+                },
+              },
+            }
+          : {}),
+      },
       ip: req.ipAddress,
     });
 
@@ -1571,7 +2232,7 @@ export function createApiRouter() {
   router.get('/admin/export/shifts.csv', authRequired, adminRequired, (req, res) => {
     const shifts = getHistory(req.user);
     const data = [
-      ['Turno', 'Apertura', 'Cierre', 'Encargado apertura', 'Encargado cierre', 'Fondo', 'Billar', 'Productos', 'Total', 'QR', 'Gastos', 'Esperado', 'Contado', 'Diferencia', 'Estado', 'Notas'],
+      ['Turno', 'Apertura', 'Cierre', 'Encargado apertura', 'Encargado cierre', 'Fondo', 'Billar', 'Productos', 'Total', 'QR ventas', 'Traspasos a caja', 'Traspasos desde caja', 'QR neto', 'Gastos', 'Esperado', 'Contado', 'Diferencia', 'Traspasos', 'Estado', 'Notas'],
       ...shifts.map((shift) => [
         shift.id,
         csvDateTime(shift.openedAt),
@@ -1583,10 +2244,14 @@ export function createApiRouter() {
         shift.totals.totalProducts,
         shift.totals.grossTotal,
         shift.totals.totalQr,
+        shift.totals.cashTransfersIn ?? 0,
+        shift.totals.cashTransfersOut ?? 0,
+        shift.totals.totalQrNet ?? shift.totals.totalQr,
         shift.totals.totalExpenses,
         shift.closing.expectedCash ?? shift.totals.expectedCash ?? '',
         shift.closing.countedCash ?? '',
         shift.closing.difference ?? '',
+        shift.totals.transfersCount ?? 0,
         shift.status === 'open' ? 'Abierto' : 'Cerrado',
         shift.closing.notes || '',
       ]),
@@ -1601,6 +2266,108 @@ export function createApiRouter() {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="turnos-billar.csv"');
     res.send(csvRows(data));
+  });
+
+  function isFiniteNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value);
+  }
+
+  function validateReceiptPayload(receipt) {
+    if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+      throw new HttpError(400, 'El comprobante no es válido.');
+    }
+    if (!Array.isArray(receipt.items)) {
+      throw new HttpError(400, 'Los ítems del comprobante no son válidos.');
+    }
+    for (const item of receipt.items) {
+      if (!item || typeof item !== 'object') {
+        throw new HttpError(400, 'Un ítem del comprobante no es válido.');
+      }
+      if (!isFiniteNumber(item.price) || !isFiniteNumber(item.quantity)) {
+        throw new HttpError(400, 'Los valores de los ítems no son válidos.');
+      }
+      if (typeof item.name !== 'string') {
+        throw new HttpError(400, 'El nombre de un ítem no es válido.');
+      }
+    }
+    for (const key of ['billiardAmount', 'productsAmount', 'totalAmount', 'cashAmount', 'qrAmount']) {
+      if (receipt[key] !== undefined && !isFiniteNumber(receipt[key])) {
+        throw new HttpError(400, `El campo ${key} del comprobante no es válido.`);
+      }
+    }
+    for (const key of ['number', 'businessName', 'currency', 'createdAt', 'cashier']) {
+      if (receipt[key] !== undefined && typeof receipt[key] !== 'string') {
+        throw new HttpError(400, `El campo ${key} del comprobante no es válido.`);
+      }
+    }
+    if (receipt.kind !== undefined && receipt.kind !== 'table' && receipt.kind !== 'sale') {
+      throw new HttpError(400, 'El tipo de comprobante no es válido.');
+    }
+    if (receipt.shiftId !== undefined && !Number.isFinite(Number(receipt.shiftId))) {
+      throw new HttpError(400, 'El turno del comprobante no es válido.');
+    }
+    if (receipt.tableName !== undefined && receipt.tableName !== null && typeof receipt.tableName !== 'string') {
+      throw new HttpError(400, 'El nombre de mesa del comprobante no es válido.');
+    }
+    if (receipt.customerName !== undefined && receipt.customerName !== null && typeof receipt.customerName !== 'string') {
+      throw new HttpError(400, 'El nombre de cliente del comprobante no es válido.');
+    }
+    if (receipt.notes !== undefined && receipt.notes !== null && typeof receipt.notes !== 'string') {
+      throw new HttpError(400, 'La nota del comprobante no es válida.');
+    }
+    if (receipt.qrReference !== undefined && receipt.qrReference !== null && typeof receipt.qrReference !== 'string') {
+      throw new HttpError(400, 'La referencia QR del comprobante no es válida.');
+    }
+  }
+
+  router.get('/print/printers', authRequired, async (req, res) => {
+    try {
+      const printers = await listPrinters();
+      res.json({ ok: true, printers });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error?.message || 'No se pudieron obtener las impresoras.' });
+    }
+  });
+
+  router.post('/print/test', authRequired, adminRequired, async (req, res) => {
+    try {
+      const settings = getSettings();
+      const requested = String(req.body?.printerName ?? '').trim();
+      if (/[\x00-\x1F\x7F]/.test(requested)) {
+        throw new HttpError(400, 'El nombre de la impresora contiene caracteres no válidos.');
+      }
+      const printerName = requested || String(settings.thermalPrinterName || '').trim();
+      if (!printerName) {
+        throw new HttpError(400, 'No hay una impresora configurada para la prueba.');
+      }
+      const buffer = buildTestEscPos();
+      await printRaw(buffer, printerName);
+      res.json({ ok: true, message: 'Ticket de prueba enviado a la impresora.' });
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 500;
+      res.status(status).json({ ok: false, error: error?.message || 'No se pudo imprimir el ticket de prueba.' });
+    }
+  });
+
+  router.post('/print/receipt', authRequired, async (req, res) => {
+    try {
+      const settings = getSettings();
+      if (!settings.rawPrintingEnabled) {
+        throw new HttpError(409, 'La impresión directa (RAW) no está activada.');
+      }
+      const printerName = String(settings.thermalPrinterName || '').trim();
+      if (!printerName) {
+        throw new HttpError(409, 'No hay una impresora térmica configurada.');
+      }
+      const receipt = req.body;
+      validateReceiptPayload(receipt);
+      const buffer = buildReceiptEscPos(receipt);
+      await printRaw(buffer, printerName);
+      res.json({ ok: true });
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 500;
+      res.status(status).json({ ok: false, error: error?.message || 'No se pudo imprimir el comprobante.' });
+    }
   });
 
   router.use((req, res) => {

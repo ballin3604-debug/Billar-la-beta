@@ -98,22 +98,54 @@ export function pinInUse(pin, exceptUserId = null) {
 }
 
 const DEFAULT_SETTINGS = {
-  businessName: 'Billar & Bar',
+  businessName: 'Billar Bar la Beta',
   currency: 'Bs',
   defaultRatePerHour: '15',
-  minimumPlayCharge: '5',
+  minimumPlayCharge: '0',
+  defaultInitialCash: '200',
   autoLockMinutes: '15',
+  receiptPromotions: '',
+  thermalPrinterName: '',
+  rawPrintingEnabled: '0',
 };
 
-const DEFAULT_TABLES = [
-  { number: 1, name: 'Mesa 1', rate: 15 },
-  { number: 2, name: 'Mesa 2', rate: 15 },
-  { number: 3, name: 'Mesa 3', rate: 15 },
-  { number: 4, name: 'Mesa 4', rate: 15 },
-  { number: 5, name: 'Mesa 5', rate: 20 },
-  { number: 6, name: 'Mesa 6', rate: 20 },
-  { number: 7, name: 'Mesa 7', rate: 20 },
+export const TABLE_COLORS = [
+  'blue',
+  'violet',
+  'amber',
+  'sky',
+  'pink',
+  'lime',
+  'orange',
+  'teal',
+  'indigo',
+  'fuchsia',
 ];
+
+const TABLE_COLOR_SET = new Set(TABLE_COLORS);
+
+const DEFAULT_TABLES = [
+  { number: 1, name: 'Mesa 1', rate: 15, color: 'blue' },
+  { number: 2, name: 'Mesa 2', rate: 15, color: 'violet' },
+  { number: 3, name: 'Mesa 3', rate: 15, color: 'amber' },
+  { number: 4, name: 'Mesa 4', rate: 15, color: 'sky' },
+  { number: 5, name: 'Mesa 5', rate: 20, color: 'pink' },
+  { number: 6, name: 'Mesa 6', rate: 20, color: 'lime' },
+  { number: 7, name: 'Mesa 7', rate: 20, color: 'orange' },
+];
+
+export function isTableColor(value) {
+  return TABLE_COLOR_SET.has(String(value ?? ''));
+}
+
+export function pickTableColor() {
+  const rows = all('SELECT color FROM tables');
+  const used = new Set(rows.map((row) => row.color).filter((color) => isTableColor(color)));
+  return (
+    TABLE_COLORS.find((color) => !used.has(color)) ??
+    TABLE_COLORS[rows.length % TABLE_COLORS.length]
+  );
+}
 
 const DEFAULT_PRODUCTS = [
   { name: 'Macanuda', category: 'cervezas', price: 22, favorite: 1 },
@@ -162,6 +194,7 @@ function createSchema() {
       number INTEGER NOT NULL,
       name TEXT NOT NULL,
       rate_per_hour REAL NOT NULL,
+      color TEXT NOT NULL DEFAULT 'blue',
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
@@ -217,9 +250,12 @@ function createSchema() {
       opened_by_name TEXT NOT NULL,
       start_time TEXT NOT NULL,
       rate_per_hour REAL NOT NULL,
+      paused_seconds INTEGER NOT NULL DEFAULT 0,
+      checkout_started_at TEXT,
       closed_at TEXT,
       closed_by INTEGER REFERENCES users(id),
       closed_by_name TEXT,
+      notes TEXT,
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'charged', 'cancelled'))
     );
 
@@ -279,6 +315,7 @@ function createSchema() {
       qr_amount REAL NOT NULL,
       qr_reference TEXT,
       notes TEXT,
+      customer_name TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'voided')),
       voided_by INTEGER REFERENCES users(id),
       voided_by_name TEXT,
@@ -293,6 +330,33 @@ function createSchema() {
       name TEXT NOT NULL,
       price REAL NOT NULL,
       quantity INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_tabs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_id INTEGER NOT NULL REFERENCES shifts(id),
+      opened_by INTEGER NOT NULL REFERENCES users(id),
+      opened_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'charged', 'cancelled')),
+      charged_at TEXT,
+      closed_by INTEGER REFERENCES users(id),
+      closed_by_name TEXT,
+      sale_id INTEGER REFERENCES sales(id),
+      notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_tab_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tab_id INTEGER NOT NULL REFERENCES customer_tabs(id),
+      product_id INTEGER REFERENCES products(id),
+      name TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity INTEGER NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS expenses (
@@ -320,6 +384,23 @@ function createSchema() {
       unit_price REAL NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS cash_transfers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_id INTEGER NOT NULL REFERENCES shifts(id),
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('qr_to_cash', 'cash_to_qr')),
+      amount REAL NOT NULL,
+      concept TEXT NOT NULL,
+      reference TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'voided')),
+      voided_by INTEGER REFERENCES users(id),
+      voided_by_name TEXT,
+      voided_at TEXT,
+      void_reason TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at TEXT NOT NULL,
@@ -345,6 +426,8 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_sales_shift ON sales(shift_id);
     CREATE INDEX IF NOT EXISTS idx_expenses_shift ON expenses(shift_id);
     CREATE INDEX IF NOT EXISTS idx_expense_items_expense ON expense_items(expense_id);
+    CREATE INDEX IF NOT EXISTS idx_cash_transfers_shift ON cash_transfers(shift_id);
+    CREATE INDEX IF NOT EXISTS idx_cash_transfers_created ON cash_transfers(created_at);
     CREATE INDEX IF NOT EXISTS idx_session_items_session ON session_items(session_id);
     CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
     CREATE INDEX IF NOT EXISTS idx_audit_shift ON audit_log(shift_id);
@@ -369,7 +452,7 @@ function seedDatabase() {
     run(
       `INSERT INTO users (name, pin_hash, pin_salt, role, active, must_change_pin, created_at)
        VALUES (?, ?, ?, 'admin', 1, 1, ?)`,
-      'Dueño',
+      'Encargado',
       hash,
       salt,
       nowIso()
@@ -379,10 +462,10 @@ function seedDatabase() {
   const tableCount = get('SELECT COUNT(*) AS count FROM tables');
   if (!tableCount || tableCount.count === 0) {
     const insert = db.prepare(
-      'INSERT INTO tables (number, name, rate_per_hour, active, created_at) VALUES (?, ?, ?, 1, ?)'
+      'INSERT INTO tables (number, name, rate_per_hour, color, active, created_at) VALUES (?, ?, ?, ?, 1, ?)'
     );
     for (const table of DEFAULT_TABLES) {
-      insert.run(table.number, table.name, table.rate, nowIso());
+      insert.run(table.number, table.name, table.rate, table.color, nowIso());
     }
   }
 
@@ -401,15 +484,159 @@ function seedDatabase() {
 createSchema();
 seedDatabase();
 
+// Migración de colores de mesa: agrega la columna y asigna un color distinto
+// a cada mesa existente antes de que el administrador pueda personalizarlos.
+function migrateTableColors() {
+  const columns = all('PRAGMA table_info(tables)');
+  const hasColor = columns.some((column) => column.name === 'color');
+
+  if (!hasColor) {
+    db.exec("ALTER TABLE tables ADD COLUMN color TEXT NOT NULL DEFAULT 'blue';");
+    run("DELETE FROM meta WHERE key = 'table_colors_v1'");
+  }
+
+  const applied = get("SELECT value FROM meta WHERE key = 'table_colors_v1'");
+  if (applied) return;
+
+  const rows = all('SELECT id, color FROM tables ORDER BY number ASC, id ASC');
+  const used = new Set();
+  const pending = [];
+
+  for (const row of rows) {
+    if (isTableColor(row.color) && !used.has(row.color)) {
+      used.add(row.color);
+    } else {
+      pending.push(row);
+    }
+  }
+
+  const update = db.prepare('UPDATE tables SET color = ? WHERE id = ?');
+  let fallbackIndex = 0;
+
+  for (const row of pending) {
+    let color = TABLE_COLORS.find((candidate) => !used.has(candidate));
+    if (!color) {
+      color = TABLE_COLORS[fallbackIndex % TABLE_COLORS.length];
+      fallbackIndex += 1;
+    }
+    used.add(color);
+    update.run(color, row.id);
+  }
+
+  run("INSERT INTO meta (key, value) VALUES ('table_colors_v1', '1')");
+}
+
+migrateTableColors();
+
+// Migración de la regla de cobro: sin mínimo de 5 Bs y en pasos de 0,50 Bs.
+function migrateBillingRules() {
+  const applied = get("SELECT value FROM meta WHERE key = 'billing_half_steps_v1'");
+  if (applied) return;
+  run("UPDATE settings SET value = '0' WHERE key = 'minimumPlayCharge'");
+  run("INSERT INTO meta (key, value) VALUES ('billing_half_steps_v1', '1')");
+}
+
+migrateBillingRules();
+
+// Migración del cobro con tiempo detenido: guarda la pausa acumulada y la
+// hora exacta en que el cajero abrió el cobro de la mesa.
+function migrateSessionCheckout() {
+  const columns = all('PRAGMA table_info(sessions)');
+  const names = new Set(columns.map((column) => column.name));
+
+  if (!names.has('paused_seconds')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN paused_seconds INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!names.has('checkout_started_at')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN checkout_started_at TEXT;');
+  }
+}
+
+migrateSessionCheckout();
+
+// Tipo de jugadores en la mesa: normal, staff (encargados, cortesía) o mixed (50% mesa).
+function migrateSessionPlayerType() {
+  const sessionColumns = all('PRAGMA table_info(sessions)');
+  if (!sessionColumns.some((column) => column.name === 'player_type')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN player_type TEXT NOT NULL DEFAULT 'normal';");
+  }
+  const playColumns = all('PRAGMA table_info(plays)');
+  if (!playColumns.some((column) => column.name === 'player_type')) {
+    db.exec("ALTER TABLE plays ADD COLUMN player_type TEXT NOT NULL DEFAULT 'normal';");
+  }
+}
+
+migrateSessionPlayerType();
+
+// Cuentas por cliente: pestañas abiertas con consumo acumulado.
+function migrateCustomerTabs() {
+  const saleColumns = all('PRAGMA table_info(sales)');
+  if (!saleColumns.some((column) => column.name === 'customer_name')) {
+    db.exec('ALTER TABLE sales ADD COLUMN customer_name TEXT;');
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_tabs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_id INTEGER NOT NULL REFERENCES shifts(id),
+      opened_by INTEGER NOT NULL REFERENCES users(id),
+      opened_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      customer_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'charged', 'cancelled')),
+      charged_at TEXT,
+      closed_by INTEGER REFERENCES users(id),
+      closed_by_name TEXT,
+      sale_id INTEGER REFERENCES sales(id),
+      notes TEXT
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_tab_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tab_id INTEGER NOT NULL REFERENCES customer_tabs(id),
+      product_id INTEGER REFERENCES products(id),
+      name TEXT NOT NULL,
+      price REAL NOT NULL,
+      quantity INTEGER NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_customer_tabs_shift ON customer_tabs(shift_id, status);'
+  );
+  db.exec(
+    'CREATE INDEX IF NOT EXISTS idx_customer_tab_items_tab ON customer_tab_items(tab_id);'
+  );
+}
+
+migrateCustomerTabs();
+
+// Nota opcional en sesión abierta: ayuda al cajero a recordar contexto al cobrar.
+function migrateSessionNotes() {
+  const sessionColumns = all('PRAGMA table_info(sessions)');
+  if (!sessionColumns.some((column) => column.name === 'notes')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN notes TEXT;');
+  }
+}
+
+migrateSessionNotes();
+
 export function getSettings() {
   const rows = all('SELECT key, value FROM settings');
   const map = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+  const rawEnabled = map.rawPrintingEnabled ?? DEFAULT_SETTINGS.rawPrintingEnabled;
   return {
     businessName: map.businessName || DEFAULT_SETTINGS.businessName,
     currency: map.currency || DEFAULT_SETTINGS.currency,
     defaultRatePerHour: Number(map.defaultRatePerHour ?? DEFAULT_SETTINGS.defaultRatePerHour),
     minimumPlayCharge: Number(map.minimumPlayCharge ?? DEFAULT_SETTINGS.minimumPlayCharge),
+    defaultInitialCash: Number(map.defaultInitialCash ?? DEFAULT_SETTINGS.defaultInitialCash),
     autoLockMinutes: Number(map.autoLockMinutes ?? DEFAULT_SETTINGS.autoLockMinutes),
+    receiptPromotions: String(map.receiptPromotions ?? DEFAULT_SETTINGS.receiptPromotions),
+    thermalPrinterName: String(map.thermalPrinterName ?? DEFAULT_SETTINGS.thermalPrinterName),
+    rawPrintingEnabled: rawEnabled === '1' || rawEnabled === 'true' || rawEnabled === true,
   };
 }
 
@@ -419,16 +646,24 @@ export function saveSettings(patch) {
     'currency',
     'defaultRatePerHour',
     'minimumPlayCharge',
+    'defaultInitialCash',
     'autoLockMinutes',
+    'receiptPromotions',
+    'thermalPrinterName',
+    'rawPrintingEnabled',
   ]);
   const update = db.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`
   );
-  for (const [key, value] of Object.entries(patch)) {
-    if (allowed.has(key) && value !== undefined && value !== null) {
-      update.run(key, String(value));
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (!allowed.has(key) || value === undefined || value === null) continue;
+    if (key === 'rawPrintingEnabled') {
+      const enabled = value === true || value === 'true' || value === '1' || value === 1;
+      update.run(key, enabled ? '1' : '0');
+      continue;
     }
+    update.run(key, String(value));
   }
   return getSettings();
 }

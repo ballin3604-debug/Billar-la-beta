@@ -7,6 +7,7 @@ import {
   LogOut,
   ReceiptText,
   Settings,
+  ShoppingBag,
   Wallet,
   WifiOff,
 } from 'lucide-react';
@@ -26,6 +27,12 @@ const TABS: Array<{
   cashierOnly?: boolean;
 }> = [
   { id: 'mesas', label: 'Mesas', icon: <LayoutGrid className="h-4 w-4" /> },
+  {
+    id: 'ventas',
+    label: 'Ventas',
+    icon: <ShoppingBag className="h-4 w-4" />,
+    cashierOnly: true,
+  },
   { id: 'caja', label: 'Caja', icon: <Wallet className="h-4 w-4" />, adminOnly: true },
   { id: 'historial', label: 'Historial', icon: <History className="h-4 w-4" />, adminOnly: true },
   {
@@ -76,7 +83,7 @@ export const Header: React.FC = () => {
               <Logo size="sm" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-black leading-tight text-white">
-                  {settings?.businessName || 'Billar & Bar'}
+                  {settings?.businessName || 'Billar Bar la Beta'}
                 </p>
                 <p className="hidden text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:block">
                   Control de caja y mesas
@@ -108,9 +115,7 @@ export const Header: React.FC = () => {
                   <p className="num text-[9px] text-slate-500">
                     {currentShift
                       ? `Desde ${formatClock(currentShift.openedAt)} · ${occupied} mesa${occupied === 1 ? '' : 's'}`
-                      : user?.role === 'admin'
-                      ? 'Abre un turno para operar'
-                      : 'El administrador debe abrir la caja'}
+                      : 'Abre un turno para operar'}
                   </p>
                 </div>
               </div>

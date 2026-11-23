@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createApiRouter } from './api.mjs';
 import {
+  BACKUP_DIR,
   db,
   DB_PATH,
   createDailyBackupIfNeeded,
@@ -38,7 +39,7 @@ if (existsSync(path.join(distDir, 'index.html'))) {
   app.get('/', (req, res) => {
     res.status(200).json({
       ok: true,
-      message: 'API local de Billar & Bar. En desarrollo abre la interfaz con Vite en el puerto 3000.',
+      message: 'API local de Billar Bar la Beta. En desarrollo abre la interfaz con Vite en el puerto 3000.',
     });
   });
 }
@@ -87,10 +88,10 @@ function openBrowser(url) {
 const server = app.listen(port, host, () => {
   const url = `http://127.0.0.1:${port}`;
   console.log('');
-  console.log('  BILLAR & BAR · CAJA LOCAL');
+  console.log('  BILLAR BAR LA BETA · CAJA LOCAL');
   console.log(`  Interfaz:      ${url}`);
   console.log(`  Base de datos: ${DB_PATH}`);
-  console.log(`  Respaldos:     ${path.join(rootDir, 'data', 'backups')}`);
+  console.log(`  Respaldos:     ${BACKUP_DIR}`);
   console.log('');
   console.log('  Deja esta ventana abierta mientras usas el sistema.');
   console.log('  Para detenerlo, cierra esta ventana o presiona Ctrl+C.');

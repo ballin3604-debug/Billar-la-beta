@@ -5,6 +5,7 @@ import {
   LockKeyhole,
   LogIn,
   ShieldCheck,
+  ShoppingBag,
   TableProperties,
 } from 'lucide-react';
 import type { ShiftDetail } from '../types';
@@ -36,8 +37,8 @@ export const CashierCloseView: React.FC<CashierCloseViewProps> = ({ onShiftClose
           </span>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Cuenta el efectivo de la gaveta y registra tu salida. El sistema no muestra el efectivo
-          esperado.
+          Cuenta el efectivo de la gaveta y registra tu salida. El arqueo final es ciego: el
+          sistema no muestra el efectivo esperado.
         </p>
       </div>
 
@@ -70,7 +71,7 @@ export const CashierCloseView: React.FC<CashierCloseViewProps> = ({ onShiftClose
               <p className="num text-sm font-bold text-sky-300">
                 {attendanceToday ? formatClock(attendanceToday.checkInAt) : '—'}
               </p>
-              <p className="mt-0.5 text-[10px] text-slate-500">Salida al confirmar el arqueo</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">Salida al cerrar sesión o caja</p>
             </div>
           </div>
 
@@ -113,8 +114,9 @@ export const CashierCloseView: React.FC<CashierCloseViewProps> = ({ onShiftClose
           <div className="flex items-start gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/[0.06] px-3.5 py-3 text-[11px] leading-relaxed text-sky-200/90">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              <strong>Arqueo ciego:</strong> no verás ventas, efectivo esperado ni diferencias.
-              Cuenta toda la gaveta con calma e ingresa el total.
+              <strong>Arqueo ciego:</strong> no verás el efectivo esperado ni la diferencia final.
+              Puedes revisar tus ventas y el desglose de efectivo/QR en la pestaña Ventas antes de
+              contar la gaveta.
             </span>
           </div>
 
@@ -128,6 +130,15 @@ export const CashierCloseView: React.FC<CashierCloseViewProps> = ({ onShiftClose
               {attendanceToday ? `Entrada ${formatClock(attendanceToday.checkInAt)}` : 'Entrada sin registro'}
             </span>
           </div>
+
+          <button
+            type="button"
+            className="btn-secondary w-full"
+            onClick={() => setTab('ventas')}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Ver ventas y pagos del turno
+          </button>
 
           <button
             type="button"

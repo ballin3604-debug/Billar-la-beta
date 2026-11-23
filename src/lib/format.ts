@@ -9,7 +9,7 @@ export function formatMoney(value: number | null | undefined, currency = 'Bs') {
     minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(amount);
-  return `${formatted} ${currency}`;
+  return `${formatted}\u00A0${currency}`;
 }
 
 export function formatNumber(value: number | null | undefined) {
@@ -95,14 +95,8 @@ export function formatShiftRange(shift: {
   openedAt?: string;
   closedAt?: string | null;
 }) {
-  if (shift.openedAt) {
-    const start = formatDateTime(shift.openedAt);
-    if (shift.closedAt) return `${start} → ${formatDateTime(shift.closedAt)}`;
-    return `${start} → en curso`;
-  }
-  if (shift.dateEnd && shift.dateEnd !== shift.dateStart) {
-    return `${formatDateShort(shift.dateStart)} → ${formatDateShort(shift.dateEnd)}`;
-  }
+  // Un turno pertenece a una sola fecha: se muestra solo esa fecha para no
+  // mezclar días aunque la caja haya quedado abierta de un día para otro.
   return formatDateShort(shift.dateStart);
 }
 
@@ -117,14 +111,17 @@ export function calculateSession(
   startTime: string,
   ratePerHour: number,
   minimumCharge: number,
-  nowMs: number
+  nowMs: number,
+  pausedSeconds = 0
 ): SessionCalculation {
   const start = new Date(startTime).getTime();
-  const seconds = Math.max(0, Math.floor((nowMs - start) / 1000));
+  const pausedMs = Math.max(0, Number(pausedSeconds) || 0) * 1000;
+  const seconds = Math.max(0, Math.floor((nowMs - start - pausedMs) / 1000));
   const minutes = Math.floor(seconds / 60);
   const rawCost = (minutes / 60) * Number(ratePerHour || 0);
-  let cost = minutes > 0 ? Math.max(Number(minimumCharge || 0), rawCost) : 0;
-  cost = Math.round(cost);
+  // El billar se cobra en pasos de 0,50 Bs desde el primer minuto.
+  const stepCost = minutes > 0 ? Math.ceil(rawCost / 0.5) * 0.5 : 0;
+  const cost = Math.round((Math.max(Number(minimumCharge || 0), stepCost) + Number.EPSILON) * 100) / 100;
 
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -134,6 +131,35 @@ export function calculateSession(
   return { seconds, minutes, cost, timer };
 }
 
+export interface SessionTiming {
+  startTime: string;
+  ratePerHour: number;
+  pausedSeconds?: number;
+  checkoutStartedAt?: string | null;
+}
+
+/**
+ * Calcula una mesa usando la hora congelada del cobro cuando existe. Así el
+ * cronómetro y el monto dejan de avanzar mientras el cajero elige el pago.
+ */
+export function calculateActiveSession(
+  session: SessionTiming,
+  minimumCharge: number,
+  nowMs: number
+): SessionCalculation {
+  const frozenMs = session.checkoutStartedAt
+    ? new Date(session.checkoutStartedAt).getTime()
+    : Number.NaN;
+  const effectiveNow = Number.isFinite(frozenMs) ? frozenMs : nowMs;
+  return calculateSession(
+    session.startTime,
+    session.ratePerHour,
+    minimumCharge,
+    effectiveNow,
+    session.pausedSeconds
+  );
+}
+
 export function durationLabel(minutes: number) {
   const total = Math.max(0, Math.floor(Number(minutes) || 0));
   const hours = Math.floor(total / 60);
@@ -141,10 +167,36 @@ export function durationLabel(minutes: number) {
   return hours > 0 ? `${hours}h ${String(mins).padStart(2, '0')}m` : `${mins}m`;
 }
 
+export function tablePlayerTypeLabel(type?: string) {
+  if (type === 'staff') return 'Encargados (sin cobro de mesa)';
+  if (type === 'mixed') return 'Encargado + cliente (50% mesa)';
+  return 'Normal';
+}
+
+export function effectiveBilliardAmount(
+  computedCost: number,
+  playerType?: string
+) {
+  const amount = Math.round((Math.max(0, Number(computedCost) || 0) + Number.EPSILON) * 100) / 100;
+  if (playerType === 'staff') return 0;
+  if (playerType === 'mixed') return Math.round((amount / 2 + Number.EPSILON) * 100) / 100;
+  return amount;
+}
+
 export function paymentLabel(method: PaymentMethod | string) {
   if (method === 'qr') return 'QR';
   if (method === 'mixto') return 'Mixto';
   return 'Efectivo';
+}
+
+export function transferDirectionLabel(direction: string) {
+  return direction === 'qr_to_cash'
+    ? 'Entregó efectivo · recibió QR'
+    : 'Recibió efectivo · entregó QR';
+}
+
+export function transferCashEffectLabel(direction: string) {
+  return direction === 'qr_to_cash' ? 'Sale de caja' : 'Entra a caja';
 }
 
 export function productCategoryLabel(category: ProductCategory | string) {
@@ -212,6 +264,8 @@ export function actionLabel(action: string) {
     play_void: 'Partida anulada',
     expense_add: 'Gasto registrado',
     expense_void: 'Gasto anulado',
+    cash_transfer_create: 'Traspaso QR ↔ efectivo',
+    cash_transfer_void: 'Traspaso anulado',
     user_create: 'Usuario creado',
     user_update: 'Usuario actualizado',
     user_reset_pin: 'PIN restablecido',
@@ -219,6 +273,7 @@ export function actionLabel(action: string) {
     product_update: 'Producto actualizado',
     table_create: 'Mesa creada',
     table_update: 'Mesa actualizada',
+    price_change: 'Cambio de precios',
     settings_update: 'Configuración actualizada',
     backup_create: 'Copia de seguridad',
     backup_download: 'Respaldo descargado',

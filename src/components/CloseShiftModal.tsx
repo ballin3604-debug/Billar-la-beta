@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeftRight,
   LogIn,
   LogOut,
   LockKeyhole,
@@ -48,6 +49,20 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const openTables = tables.filter((table) => table.status === 'occupied');
+  const activeTransfers = (currentShift?.cashTransfers ?? []).filter(
+    (transfer) => transfer.status === 'active'
+  );
+  const transfersIn = round2(
+    activeTransfers
+      .filter((transfer) => transfer.direction === 'cash_to_qr')
+      .reduce((sum, transfer) => sum + Number(transfer.amount || 0), 0)
+  );
+  const transfersOut = round2(
+    activeTransfers
+      .filter((transfer) => transfer.direction === 'qr_to_cash')
+      .reduce((sum, transfer) => sum + Number(transfer.amount || 0), 0)
+  );
+  const transfersNet = round2(transfersIn - transfersOut);
 
   useEffect(() => {
     if (open) {
@@ -92,7 +107,7 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
       return setError('El efectivo contado no es válido.');
     }
     if (difference !== null && Math.abs(difference) > 0.009 && notes.trim().length < 3) {
-      return setError('Explica la diferencia de caja en las observaciones antes de cerrar.');
+      return setError('Explica el saldo en contra o a favor en las observaciones antes de cerrar.');
     }
 
     setBusy(true);
@@ -185,19 +200,19 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
         {isAdmin && expectedCash !== undefined ? (
           <div className="grid grid-cols-3 gap-2">
             <div className="kpi">
-              <p className="label mb-1">Esperado en caja</p>
+              <p className="label mb-1">Total Efectivo esperado</p>
               <p className="num text-base font-bold text-sky-300">
                 {formatMoney(expectedCash, currency)}
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Contado</p>
+              <p className="label mb-1">Total de Efectivo en Caja</p>
               <p className="num text-base font-bold text-emerald-300">
                 {formatMoney(countedCash, currency)}
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Diferencia</p>
+              <p className="label mb-1">Saldo en contra (−) o a favor (+)</p>
               <p
                 className={`num text-base font-bold ${
                   difference === null || Math.abs(difference) < 0.01
@@ -224,9 +239,48 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
           </div>
         )}
 
+        {activeTransfers.length > 0 ? (
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.05] px-3.5 py-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-violet-200">
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+              {isAdmin ? 'Traspasos QR ↔ efectivo del turno' : 'Tus traspasos QR ↔ efectivo'}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+              <div>
+                <p className="text-slate-500">Entran a caja</p>
+                <p className="num mt-0.5 font-bold text-emerald-300">
+                  +{formatMoney(transfersIn, currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Salen de caja</p>
+                <p className="num mt-0.5 font-bold text-amber-300">
+                  −{formatMoney(transfersOut, currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Neto en efectivo</p>
+                <p
+                  className={`num mt-0.5 font-bold ${
+                    transfersNet < 0 ? 'text-amber-300' : 'text-emerald-300'
+                  }`}
+                >
+                  {transfersNet > 0 ? '+' : ''}
+                  {formatMoney(transfersNet, currency)}
+                </p>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
+              {isAdmin
+                ? 'Ya están incluidos en el efectivo esperado. No cuentan como venta ni como gasto.'
+                : 'Solo se muestran los traspasos que registraste. El administrador verá el efecto completo en el arqueo.'}
+            </p>
+          </div>
+        ) : null}
+
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="label mb-0">Efectivo contado</p>
+            <p className="label mb-0">Total de Efectivo en Caja</p>
             <button
               type="button"
               className="text-[10px] font-semibold text-sky-400 hover:text-sky-300"
@@ -268,7 +322,7 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
                 ))}
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-2.5">
-                <span className="text-[11px] text-slate-500">Total contado</span>
+                <span className="text-[11px] text-slate-500">Total de Efectivo en Caja</span>
                 <span className="num text-lg font-black text-emerald-300">
                   {formatMoney(denominationTotal, currency)}
                 </span>
@@ -280,7 +334,7 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
               <input
                 className="input num pl-9 text-lg font-bold"
                 inputMode="decimal"
-                placeholder="Total contado"
+                placeholder="Total de Efectivo en Caja"
                 value={countedInput}
                 onChange={(event) => {
                   const value = event.target.value;

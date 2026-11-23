@@ -31,7 +31,7 @@ internal static class Program
                         MessageBox.Show(
                             "El puerto 3001 está ocupado por otro programa.\n\n" +
                             "Cierra ese programa o reinicia la computadora e intenta de nuevo.",
-                            "Billar & Bar",
+                            "Billar Bar la Beta",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Error
                         );
@@ -63,8 +63,9 @@ internal static class Program
                     {
                         MessageBox.Show(
                             "No se pudo iniciar el servidor local del sistema.\n\n" +
-                            "Verifica que Node.js esté instalado y que el puerto 3001 esté libre.",
-                            "Billar & Bar",
+                            "Cierra el sistema y vuelve a abrirlo. Si el problema continúa, " +
+                            "reinstala Billar Bar la Beta con el instalador original.",
+                            "Billar Bar la Beta",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Error
                         );
@@ -79,7 +80,7 @@ internal static class Program
         {
             MessageBox.Show(
                 error.Message,
-                "Billar & Bar",
+                "Billar Bar la Beta",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
@@ -167,11 +168,12 @@ internal static class Program
 
     private static void StartServer(string baseDir)
     {
-        string node = FindNode();
+        string node = FindNode(baseDir);
         if (node == null)
         {
             throw new Exception(
-                "No se encontró Node.js.\n\nInstala Node.js 22 LTS o superior desde https://nodejs.org"
+                "No se encontró el motor interno del sistema (runtime\\node.exe).\n\n" +
+                "Vuelve a instalar Billar Bar la Beta con el instalador original."
             );
         }
 
@@ -197,8 +199,13 @@ internal static class Program
         Process.Start(info);
     }
 
-    private static string FindNode()
+    private static string FindNode(string baseDir)
     {
+        // El paquete del cliente incluye su propio Node para no depender de
+        // nada instalado en la computadora.
+        string bundled = Path.Combine(baseDir, "runtime", "node.exe");
+        if (File.Exists(bundled)) return bundled;
+
         string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -245,6 +252,9 @@ internal static class Program
 
     private static void OpenApp(string baseDir)
     {
+        // Permite probar el lanzador sin abrir una ventana del navegador.
+        if (Environment.GetEnvironmentVariable("BILLAR_NO_BROWSER") == "1") return;
+
         string browser = FindBrowser();
         if (browser != null)
         {

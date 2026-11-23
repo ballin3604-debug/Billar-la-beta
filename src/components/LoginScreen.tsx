@@ -70,7 +70,7 @@ export const LoginScreen: React.FC = () => {
                 Sistema local
               </p>
               <h1 className="text-2xl font-black leading-tight text-white">
-                {authStatus.businessName || 'Billar & Bar'}
+                {authStatus.businessName || 'Billar Bar la Beta'}
               </h1>
             </div>
           </div>
@@ -113,7 +113,7 @@ export const LoginScreen: React.FC = () => {
                 Sistema local
               </p>
               <h1 className="truncate text-lg font-black text-white">
-                {authStatus.businessName || 'Billar & Bar'}
+                {authStatus.businessName || 'Billar Bar la Beta'}
               </h1>
             </div>
           </div>

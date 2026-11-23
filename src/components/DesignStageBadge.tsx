@@ -45,7 +45,7 @@ export const DesignStageBadge: React.FC<DesignStageBadgeProps> = ({ className })
         <Modal
           open={open}
           title="Versión de diseño"
-          subtitle={`MVP ${APP_VERSION} · validación con el dueño`}
+          subtitle={`MVP ${APP_VERSION} · validación con el encargado`}
           icon={<PenTool className="h-4 w-4" />}
           onClose={() => setOpen(false)}
           size="md"
@@ -108,7 +108,7 @@ export const DesignStageBadge: React.FC<DesignStageBadgeProps> = ({ className })
                 Siguiente hito
               </p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-slate-300">
-                Validación con el dueño, ajustes finales e instalación en el equipo del salón.
+                Validación con el encargado, ajustes finales e instalación en el equipo del salón.
               </p>
             </div>
           </div>

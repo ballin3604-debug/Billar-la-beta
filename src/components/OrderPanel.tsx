@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Clock3,
   LogIn,
   LogOut,
+  Minus,
   Plus,
   Receipt,
+  RotateCcw,
   ShoppingBag,
   UserRound,
   X,
@@ -12,12 +15,15 @@ import type { Table } from '../types';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
 import {
-  calculateSession,
+  calculateActiveSession,
+  effectiveBilliardAmount,
   formatClock,
   formatMoney,
   plural,
   sumItems,
+  tablePlayerTypeLabel,
 } from '../lib/format';
+import { tableColorStyle } from '../lib/tableColors';
 import { useNow } from '../lib/useNow';
 import { ProductPicker } from './ui/ProductPicker';
 
@@ -25,9 +31,15 @@ interface OrderPanelProps {
   table: Table;
   onClose: () => void;
   onCheckout: (table: Table) => void;
+  checkoutBusy?: boolean;
 }
 
-export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onCheckout }) => {
+export const OrderPanel: React.FC<OrderPanelProps> = ({
+  table,
+  onClose,
+  onCheckout,
+  checkoutBusy = false,
+}) => {
   const {
     products,
     settings,
@@ -36,10 +48,17 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
   } = useApp();
   const now = useNow(clockOffset);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [resumeBusy, setResumeBusy] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
 
   const session = table.activeSession;
   const currency = settings?.currency || 'Bs';
   const minimumCharge = settings?.minimumPlayCharge || 0;
+
+  useEffect(() => {
+    setNoteDraft(session?.notes || '');
+  }, [session?.id, session?.notes]);
 
   if (!session) {
     return (
@@ -54,14 +73,15 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
     );
   }
 
-  const calculation = calculateSession(
-    session.startTime,
-    session.ratePerHour,
-    minimumCharge,
-    now
-  );
+  const calculation = calculateActiveSession(session, minimumCharge, now);
+  const frozenMs = session.checkoutStartedAt
+    ? new Date(session.checkoutStartedAt).getTime()
+    : Number.NaN;
+  const displayNow = Number.isFinite(frozenMs) ? frozenMs : now;
   const itemsAmount = sumItems(session.items);
-  const total = itemsAmount + calculation.cost;
+  const billiardAmount = effectiveBilliardAmount(calculation.cost, session.playerType);
+  const total = itemsAmount + billiardAmount;
+  const checkoutFrozen = Boolean(session.checkoutStartedAt);
   const selected = Object.fromEntries(
     session.items
       .filter((item) => item.productId !== null)
@@ -78,12 +98,49 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
     }
   };
 
+  const removeItem = async (itemId: number) => {
+    if (busyKey) return;
+    setBusyKey(`remove-${itemId}`);
+    try {
+      await runAction(() => api.removeItem(table.id, itemId));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const resumeTime = async () => {
+    if (resumeBusy) return;
+    setResumeBusy(true);
+    try {
+      await runAction(() => api.cancelCheckout(table.id));
+    } finally {
+      setResumeBusy(false);
+    }
+  };
+
+  const saveNote = async () => {
+    if (!session) return;
+    const next = noteDraft.trim().slice(0, 300);
+    const current = String(session.notes || '').trim();
+    if (next === current) {
+      if (noteDraft !== (session.notes || '')) setNoteDraft(session.notes || '');
+      return;
+    }
+    setNoteSaving(true);
+    try {
+      await runAction(() => api.updateTableNote(table.id, next));
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
   return (
-    <div className="panel overflow-hidden">
+    <div className="panel overflow-hidden" style={tableColorStyle(table.color)}>
+      <span className="table-accent block h-1" />
       <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 bg-gradient-to-b from-slate-900/50 to-transparent px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-xs font-black text-emerald-300">
+            <span className="table-badge flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black">
               {table.number}
             </span>
             <div className="min-w-0">
@@ -98,12 +155,23 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
                   title="Hora de salida y total al corte si cobras la mesa en este momento"
                 >
                   <LogOut className="h-3 w-3 text-sky-400/80" />
-                  Salida {formatClock(new Date(now))}
+                  Salida {formatClock(new Date(displayNow))}
                 </span>
                 <span className="flex items-center gap-1">
                   <UserRound className="h-3 w-3" />
                   {session.openedByName}
                 </span>
+                {session.playerType !== 'normal' ? (
+                  <span className="inline-flex items-center rounded border border-violet-500/25 bg-violet-500/10 px-1.5 py-0.5 font-bold text-violet-300">
+                    {tablePlayerTypeLabel(session.playerType)}
+                  </span>
+                ) : null}
+                {checkoutFrozen ? (
+                  <span className="inline-flex items-center gap-1 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-bold text-amber-300">
+                    <Clock3 className="h-2.5 w-2.5" />
+                    Tiempo detenido
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -126,7 +194,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
               Billar ahora
             </p>
             <p className="num text-xl font-bold text-emerald-300">
-              {formatMoney(calculation.cost, currency)}
+              {formatMoney(billiardAmount, currency)}
             </p>
           </div>
         </div>
@@ -169,6 +237,15 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 text-slate-400 transition hover:border-rose-500/50 hover:text-rose-300 disabled:opacity-40"
+                    onClick={() => removeItem(item.id)}
+                    disabled={Boolean(busyKey) || checkoutFrozen}
+                    aria-label={`Quitar uno de ${item.name}`}
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
                   <span className="num w-5 text-center text-xs font-bold text-white">
                     {item.quantity}
                   </span>
@@ -178,7 +255,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
                     onClick={() => {
                       if (item.productId) addProduct(item.productId);
                     }}
-                    disabled={Boolean(busyKey) || !item.productId}
+                    disabled={Boolean(busyKey) || checkoutFrozen || !item.productId}
                     aria-label={`Agregar uno de ${item.name}`}
                   >
                     <Plus className="h-3 w-3" />
@@ -189,13 +266,39 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
           </div>
         )}
 
+        <div className="mt-3 rounded-xl border border-slate-800 bg-[#08111d] p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400" htmlFor={`table-note-${table.id}`}>
+              Nota para el cobro
+            </label>
+            <span className="text-[9px] text-slate-500">
+              {noteSaving ? 'Guardando…' : 'Se guarda al salir del cuadro'}
+            </span>
+          </div>
+          <textarea
+            id={`table-note-${table.id}`}
+            className="input min-h-[72px] resize-y text-[11px]"
+            maxLength={300}
+            placeholder="Ej.: Ya pagó en efectivo, falta solo confirmar / pagará con QR..."
+            value={noteDraft}
+            onChange={(event) => setNoteDraft(event.target.value)}
+            onBlur={() => void saveNote()}
+          />
+        </div>
+
         <div className="mt-3 border-t border-slate-800/80 pt-3">
+          {checkoutFrozen ? (
+            <p className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-1.5 text-[10px] leading-relaxed text-amber-200/80">
+              El consumo está bloqueado mientras el cobro está abierto. Reanuda el tiempo para
+              modificarlo.
+            </p>
+          ) : null}
           <ProductPicker
             products={products}
             currency={currency}
             selected={selected}
             onPick={(product) => addProduct(product.id)}
-            disabled={Boolean(busyKey)}
+            disabled={Boolean(busyKey) || checkoutFrozen || resumeBusy}
           />
         </div>
       </div>
@@ -203,8 +306,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
       <div className="sticky bottom-0 border-t border-slate-800/80 bg-[#0b1422]/95 px-4 py-3 backdrop-blur">
         <div className="mb-2 space-y-1">
           <div className="flex justify-between text-[11px]">
-            <span className="text-slate-500">Billar</span>
-            <span className="num text-slate-300">{formatMoney(calculation.cost, currency)}</span>
+            <span className="text-slate-500">Billar{session.playerType === 'mixed' ? ' (50%)' : session.playerType === 'staff' ? ' (cortesía)' : ''}</span>
+            <span className="num text-slate-300">{formatMoney(billiardAmount, currency)}</span>
           </div>
           <div className="flex justify-between text-[11px]">
             <span className="text-slate-500">Consumo</span>
@@ -224,14 +327,25 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({ table, onClose, onChecko
         </div>
 
         <div className="flex gap-2">
+          {checkoutFrozen ? (
+            <button
+              type="button"
+              className="btn-secondary flex-1"
+              onClick={resumeTime}
+              disabled={resumeBusy || checkoutBusy}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {resumeBusy ? 'Reanudando…' : 'Reanudar tiempo'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn-primary flex-1"
             onClick={() => onCheckout(table)}
-            disabled={Boolean(busyKey)}
+            disabled={Boolean(busyKey) || checkoutBusy || resumeBusy}
           >
             <Receipt className="h-4 w-4" />
-            Cobrar mesa
+            {checkoutFrozen ? 'Seguir cobrando' : 'Cobrar mesa'}
           </button>
         </div>
       </div>

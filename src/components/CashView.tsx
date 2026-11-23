@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ArrowLeftRight,
   Ban,
   Banknote,
   CircleDollarSign,
@@ -17,6 +18,7 @@ import {
   ShoppingBag,
   TableProperties,
   TrendingDown,
+  Users,
   Wallet,
 } from 'lucide-react';
 import type { ExpenseCategory, PaymentMethod, ShiftDetail } from '../types';
@@ -32,6 +34,8 @@ import {
   formatShiftRange,
   paymentLabel,
   plural,
+  transferCashEffectLabel,
+  transferDirectionLabel,
 } from '../lib/format';
 import { useNow } from '../lib/useNow';
 import { StatCard } from './ui/StatCard';
@@ -41,11 +45,13 @@ import { ExpenseReportModal } from './ExpenseReport';
 import { CloseShiftModal } from './CloseShiftModal';
 import { ShiftReportModal } from './ShiftReport';
 import { BarSaleModal } from './BarSaleModal';
+import { CustomerTabsModal } from './CustomerTabsModal';
+import { TransferModal } from './TransferModal';
 import { ReasonDialog } from './ui/ReasonDialog';
 import { cn as cnClass } from '../lib/format';
 
-type MovementTab = 'partidas' | 'ventas' | 'gastos' | 'qr';
-type VoidKind = 'play' | 'sale' | 'expense';
+type MovementTab = 'partidas' | 'ventas' | 'gastos' | 'traspasos' | 'qr';
+type VoidKind = 'play' | 'sale' | 'expense' | 'transfer';
 
 interface VoidTarget {
   kind: VoidKind;
@@ -68,10 +74,14 @@ const paymentChip = (method: PaymentMethod | string) => {
   );
 };
 
-const statusBadge = (status: 'active' | 'voided', activeLabel = 'Vigente') =>
+const statusBadge = (
+  status: 'active' | 'voided',
+  activeLabel = 'Vigente',
+  voidedLabel = 'Anulada'
+) =>
   status === 'voided' ? (
     <span className="inline-flex rounded-md border border-rose-500/25 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-bold text-rose-300">
-      Anulada
+      {voidedLabel}
     </span>
   ) : (
     <span className="inline-flex rounded-md border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
@@ -102,6 +112,8 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
   const [closeOpen, setCloseOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [barOpen, setBarOpen] = useState(false);
+  const [customerTabsOpen, setCustomerTabsOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<VoidTarget | null>(null);
   const [voidBusy, setVoidBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -129,9 +141,10 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
 
   const tabs: Array<{ id: MovementTab; label: string; count: number; icon: React.ReactNode }> = [
     { id: 'partidas', label: 'Partidas', count: shift.tablePlays.length, icon: <TableProperties className="h-3.5 w-3.5" /> },
-    { id: 'ventas', label: 'Ventas de barra', count: shift.sales.length, icon: <ShoppingBag className="h-3.5 w-3.5" /> },
-    { id: 'gastos', label: 'Gastos', count: shift.expenses.length, icon: <TrendingDown className="h-3.5 w-3.5" /> },
-    { id: 'qr', label: 'Pagos QR', count: shift.qrPayments.length, icon: <QrCode className="h-3.5 w-3.5" /> },
+    { id: 'ventas', label: 'Venta de Productos', count: shift.sales.length, icon: <ShoppingBag className="h-3.5 w-3.5" /> },
+    { id: 'gastos', label: 'Gastos de Caja', count: shift.expenses.length, icon: <TrendingDown className="h-3.5 w-3.5" /> },
+    { id: 'traspasos', label: 'Traspasos', count: (shift.cashTransfers ?? []).length, icon: <ArrowLeftRight className="h-3.5 w-3.5" /> },
+    { id: 'qr', label: 'QR', count: shift.qrPayments.length, icon: <QrCode className="h-3.5 w-3.5" /> },
   ];
 
   const handleRefresh = async () => {
@@ -152,7 +165,9 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
           ? await runAction(() => api.voidPlay(voidTarget.id, reason))
           : voidTarget.kind === 'sale'
           ? await runAction(() => api.voidSale(voidTarget.id, reason))
-          : await runAction(() => api.voidExpense(voidTarget.id, reason));
+          : voidTarget.kind === 'expense'
+          ? await runAction(() => api.voidExpense(voidTarget.id, reason))
+          : await runAction(() => api.voidTransfer(voidTarget.id, reason));
       if (response) setVoidTarget(null);
     } finally {
       setVoidBusy(false);
@@ -164,7 +179,9 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
       ? 'Anular partida'
       : voidTarget?.kind === 'sale'
       ? 'Anular venta de barra'
-      : 'Anular gasto';
+      : voidTarget?.kind === 'expense'
+      ? 'Anular gasto'
+      : 'Anular traspaso';
 
   return (
     <div className="space-y-4">
@@ -219,9 +236,17 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             <FileSpreadsheet className="h-4 w-4 text-rose-400" />
             Planilla de gastos
           </button>
+          <button type="button" className="btn-secondary" onClick={() => setCustomerTabsOpen(true)}>
+            <Users className="h-4 w-4 text-violet-400" />
+            Ventas por cliente
+          </button>
           <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
             <CupSoda className="h-4 w-4 text-sky-400" />
             Venta rápida
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => setTransferOpen(true)}>
+            <ArrowLeftRight className="h-4 w-4 text-violet-400" />
+            Traspaso QR ↔ efectivo
           </button>
           <button type="button" className="btn-secondary" onClick={() => setExpenseOpen(true)}>
             <ReceiptText className="h-4 w-4 text-amber-400" />
@@ -240,35 +265,46 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 2xl:grid-cols-6">
         <StatCard
-          label="Ventas del turno"
-          value={formatMoney(shift.totals.grossTotal, currency)}
-          hint={`${plural(shift.totals.playsCount, 'partida', 'partidas')} · ${plural(shift.totals.salesCount, 'venta', 'ventas')}`}
+          label="Total V.P. + T.B. + C."
+          value={formatMoney(
+            shift.totals.totalWithChange ??
+              Number(shift.initialCash || 0) + Number(shift.totals.grossTotal || 0),
+            currency
+          )}
+          hint="Venta de Productos + Tiempo Billar + Cambio"
           icon={<Banknote className="h-4 w-4" />}
           tone="emerald"
         />
         <StatCard
-          label="Billar"
+          label="Tiempo Billar"
           value={formatMoney(shift.totals.totalBilliard, currency)}
-          hint={plural(activePlays.length, 'partida cobrada', 'partidas cobradas')}
+          hint={`${plural(shift.totals.playsCount, 'partida cobrada', 'partidas cobradas')}${
+            Number(shift.totals.openSessionsCount || 0) > 0
+              ? ` + ${plural(shift.totals.openSessionsCount || 0, 'mesa abierta', 'mesas abiertas')}`
+              : ''
+          }`}
           icon={<Clock3 className="h-4 w-4" />}
           tone="sky"
         />
         <StatCard
-          label="Productos"
+          label="Venta de Productos"
           value={formatMoney(shift.totals.totalProducts, currency)}
-          hint={`Mesa ${formatMoney(shift.totals.tableProducts, currency)} · Barra ${formatMoney(shift.totals.barSales, currency)}`}
+          hint={`Mesa ${formatMoney(shift.totals.tableProducts, currency)} · Barra ${formatMoney(
+            shift.totals.barSales,
+            currency
+          )}`}
           icon={<ShoppingBag className="h-4 w-4" />}
           tone="violet"
         />
         <StatCard
-          label="Cobrado por QR"
+          label="QR"
           value={formatMoney(shift.totals.totalQr, currency)}
-          hint={plural(shift.qrPayments.length, 'pago registrado', 'pagos registrados')}
+          hint={`Neto con traspasos: ${formatMoney(shift.totals.totalQrNet ?? shift.totals.totalQr, currency)}`}
           icon={<QrCode className="h-4 w-4" />}
           tone="sky"
         />
         <StatCard
-          label="Gastos de caja"
+          label="Gastos de Caja"
           value={formatMoney(shift.totals.totalExpenses, currency)}
           hint={plural(shift.totals.expensesCount, 'gasto vigente', 'gastos vigentes')}
           icon={<TrendingDown className="h-4 w-4" />}
@@ -276,15 +312,15 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
         />
         {isAdmin && expected !== undefined ? (
           <StatCard
-            label="Efectivo esperado"
+            label="Total Efectivo esperado"
             value={formatMoney(expected, currency)}
-            hint={`Fondo ${formatMoney(shift.initialCash, currency)} + cobros − gastos`}
+            hint={`Cambio ${formatMoney(shift.initialCash, currency)} + cobros − gastos ± traspasos`}
             icon={<CircleDollarSign className="h-4 w-4" />}
             tone="amber"
           />
         ) : (
           <StatCard
-            label="Fondo inicial"
+            label="Cambio"
             value={formatMoney(shift.initialCash, currency)}
             hint="Arqueo ciego: el esperado se revela al cerrar"
             icon={<Wallet className="h-4 w-4" />}
@@ -292,6 +328,20 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
           />
         )}
       </div>
+
+      {Number(shift.totals.pendingTotal || 0) > 0 ? (
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-[10px] text-amber-200/90">
+          Los totales incluyen{' '}
+          <strong>{formatMoney(shift.totals.pendingTotal, currency)}</strong> de consumo por cobrar
+          en{' '}
+          {plural(
+            Number(shift.totals.openSessionsCount || 0) + Number(shift.totals.openTabsCount || 0),
+            'mesa o cliente abierto',
+            'mesas o clientes abiertos'
+          )}
+          . Ese monto todavía no está en caja, por eso no suma al efectivo esperado.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="panel overflow-hidden">
@@ -335,8 +385,8 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
                     <tr>
                       <th>Mesa / hora</th>
                       <th>Duración</th>
-                      <th>Billar</th>
-                      <th>Consumo</th>
+                      <th>Tiempo Billar</th>
+                      <th>Venta de Productos</th>
                       <th>Total</th>
                       <th>Pago</th>
                       <th>Estado</th>
@@ -401,7 +451,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             {movementTab === 'ventas' ? (
               shift.sales.length === 0 ? (
                 <EmptyState
-                  title="Sin ventas de barra"
+                  title="Sin venta de productos en barra"
                   description="Usa “Venta rápida” para registrar productos sin mesa."
                   icon={<ShoppingBag className="h-6 w-6" />}
                   className="m-4"
@@ -562,6 +612,117 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
               </div>
             ) : null}
 
+            {movementTab === 'traspasos' ? (
+              (shift.cashTransfers ?? []).length === 0 ? (
+                <EmptyState
+                  title="Sin traspasos QR ↔ efectivo"
+                  description="Registra los intercambios de efectivo por QR y de QR por efectivo del turno."
+                  icon={<ArrowLeftRight className="h-6 w-6" />}
+                  className="m-4"
+                  action={
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => setTransferOpen(true)}
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                      Registrar traspaso
+                    </button>
+                  }
+                />
+              ) : (
+                <table className="data-table min-w-[760px]">
+                  <thead className="table-head">
+                    <tr>
+                      <th>Hora / registró</th>
+                      <th>Movimiento</th>
+                      <th>Concepto</th>
+                      <th>Referencia</th>
+                      <th>Efecto en caja</th>
+                      <th>Estado</th>
+                      <th className="text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...shift.cashTransfers].reverse().map((transfer) => {
+                      const cashOut = transfer.direction === 'qr_to_cash';
+                      return (
+                        <tr
+                          key={transfer.id}
+                          className={transfer.status === 'voided' ? 'opacity-55' : ''}
+                        >
+                          <td>
+                            <p className="num text-slate-200">{formatClock(transfer.createdAt)}</p>
+                            <p className="text-[10px] text-slate-500">{transfer.createdByName}</p>
+                          </td>
+                          <td>
+                            <span
+                              className={cn(
+                                'inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-bold',
+                                cashOut
+                                  ? 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+                                  : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                              )}
+                            >
+                              {transferDirectionLabel(transfer.direction)}
+                            </span>
+                          </td>
+                          <td className="max-w-[200px] text-slate-300">{transfer.concept}</td>
+                          <td className="max-w-[140px] truncate text-slate-500">
+                            {transfer.reference || '—'}
+                          </td>
+                          <td
+                            className={cn(
+                              'num font-bold',
+                              cashOut ? 'text-amber-300' : 'text-emerald-300'
+                            )}
+                          >
+                            {cashOut ? '−' : '+'}
+                            {formatMoney(transfer.amount, currency)}
+                            <span className="ml-1 text-[9px] font-normal text-slate-500">
+                              {transferCashEffectLabel(transfer.direction)}
+                            </span>
+                          </td>
+                          <td>
+                            {statusBadge(transfer.status, 'Vigente', 'Anulado')}
+                            {transfer.status === 'voided' && transfer.voidReason ? (
+                              <p
+                                className="mt-1 max-w-[120px] truncate text-[9px] text-rose-300/70"
+                                title={transfer.voidReason}
+                              >
+                                {transfer.voidReason}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="text-right">
+                            {isAdmin && transfer.status === 'active' ? (
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-500 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+                                title="Anular traspaso"
+                                onClick={() =>
+                                  setVoidTarget({
+                                    kind: 'transfer',
+                                    id: transfer.id,
+                                    label: `Traspaso: ${transfer.concept}`,
+                                    amount: transfer.amount,
+                                  })
+                                }
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-700">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            ) : null}
+
             {movementTab === 'qr' ? (
               shift.qrPayments.length === 0 ? (
                 <EmptyState
@@ -618,7 +779,8 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             <span>
               {plural(activePlays.length, 'partida cobrada', 'partidas cobradas')} ·{' '}
               {plural(activeSales.length, 'venta vigente', 'ventas vigentes')} ·{' '}
-              {plural(activeExpenses.length, 'gasto vigente', 'gastos vigentes')}
+              {plural(activeExpenses.length, 'gasto vigente', 'gastos vigentes')} ·{' '}
+              {plural((shift.cashTransfers ?? []).length, 'traspaso', 'traspasos')}
             </span>
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500/70" />
@@ -664,7 +826,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
 
               <div className="space-y-1.5 text-[11px]">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Fondo inicial</span>
+                  <span className="text-slate-500">Cambio</span>
                   <span className="num text-slate-300">{formatMoney(shift.initialCash, currency)}</span>
                 </div>
                 {isAdmin && cashCollected !== undefined ? (
@@ -673,13 +835,37 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
                     <span className="num text-slate-300">{formatMoney(cashCollected, currency)}</span>
                   </div>
                 ) : null}
+                {Number(shift.totals.pendingTotal || 0) > 0 ? (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Consumo por cobrar</span>
+                    <span className="num text-amber-300">
+                      {formatMoney(shift.totals.pendingTotal, currency)}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Gastos</span>
+                  <span className="text-slate-500">Gastos de Caja</span>
                   <span className="num text-rose-300">−{formatMoney(shift.totals.totalExpenses, currency)}</span>
                 </div>
+                {(shift.totals.transfersCount ?? 0) > 0 ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Traspasos a caja</span>
+                      <span className="num text-emerald-300">
+                        +{formatMoney(shift.totals.cashTransfersIn ?? 0, currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Traspasos desde caja</span>
+                      <span className="num text-amber-300">
+                        −{formatMoney(shift.totals.cashTransfersOut ?? 0, currency)}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
                 {isAdmin && expected !== undefined ? (
                   <div className="flex items-end justify-between border-t border-slate-800 pt-2">
-                    <span className="text-xs font-bold text-slate-200">Efectivo esperado</span>
+                    <span className="text-xs font-bold text-slate-200">Total Efectivo esperado</span>
                     <span className="num text-lg font-black text-emerald-300">
                       {formatMoney(expected, currency)}
                     </span>
@@ -716,7 +902,9 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             <div className="flex items-center justify-between border-b border-slate-800/80 px-4 py-3">
               <div className="flex items-center gap-2">
                 <TableProperties className="h-4 w-4 text-slate-500" />
-                <h2 className="text-sm font-bold text-white">Resumen por mesa</h2>
+                <h2 className="text-sm font-bold text-white">
+                  Tiempo Billar y Venta de Productos por mesa
+                </h2>
               </div>
               <span className="num text-[10px] text-slate-500">
                 {formatMoney(shift.totals.totalBilliard + shift.totals.tableProducts, currency)}
@@ -733,7 +921,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
                   <thead className="table-head">
                     <tr>
                       <th>Mesa</th>
-                      <th className="text-center">N°</th>
+                      <th className="text-center">Partidas</th>
                       <th className="text-right">Total</th>
                     </tr>
                   </thead>
@@ -741,7 +929,12 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
                     {shift.tableSummary.map((row) => (
                       <tr key={row.tableId}>
                         <td className="font-medium text-slate-200">{row.tableName}</td>
-                        <td className="num text-center">{row.playsCount}</td>
+                        <td className="num text-center">
+                          {row.playsCount}
+                          {Number(row.openCount || 0) > 0 ? (
+                            <span className="ml-1 text-[9px] text-slate-500">+{row.openCount}</span>
+                          ) : null}
+                        </td>
                         <td className="num text-right font-semibold text-slate-200">
                           {formatMoney(row.total, currency)}
                         </td>
@@ -768,6 +961,8 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
 
       <ExpenseModal open={expenseOpen} onClose={() => setExpenseOpen(false)} />
       <BarSaleModal open={barOpen} onClose={() => setBarOpen(false)} />
+      <CustomerTabsModal open={customerTabsOpen} onClose={() => setCustomerTabsOpen(false)} />
+      <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} />
       <CloseShiftModal
         open={closeOpen}
         onClose={() => setCloseOpen(false)}
@@ -786,8 +981,10 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
           voidTarget ? (
             <span>
               Se anulará <strong className="text-slate-200">{voidTarget.label}</strong> por{' '}
-              {formatMoney(voidTarget.amount, currency)}. La venta dejará de contar en los totales,
-              pero quedará registrada en la auditoría.
+              {formatMoney(voidTarget.amount, currency)}.{' '}
+              {voidTarget.kind === 'transfer'
+                ? 'El traspaso dejará de ajustar el efectivo esperado del cierre, pero quedará registrado en la auditoría.'
+                : 'La venta dejará de contar en los totales, pero quedará registrada en la auditoría.'}
             </span>
           ) : null
         }

@@ -6,10 +6,12 @@ import {
   LogOut,
   Play,
   ReceiptText,
+  StickyNote,
   UserRound,
 } from 'lucide-react';
 import type { Table } from '../types';
-import { calculateSession, cn, formatClock, formatMoney, sumItems } from '../lib/format';
+import { calculateActiveSession, cn, effectiveBilliardAmount, formatClock, formatMoney, sumItems } from '../lib/format';
+import { tableColorStyle } from '../lib/tableColors';
 
 interface TableCardProps {
   table: Table;
@@ -30,38 +32,47 @@ export const TableCard: React.FC<TableCardProps> = ({
 }) => {
   const session = table.activeSession;
   const calculation = session
-    ? calculateSession(session.startTime, session.ratePerHour, minimumCharge, nowMs)
+    ? calculateActiveSession(session, minimumCharge, nowMs)
     : null;
   const itemsAmount = session ? sumItems(session.items) : 0;
-  const total = (calculation?.cost ?? 0) + itemsAmount;
+  const billiardAmount = effectiveBilliardAmount(calculation?.cost ?? 0, session?.playerType);
+  const total = billiardAmount + itemsAmount;
   const occupied = Boolean(session);
+  const frozenMs = session?.checkoutStartedAt
+    ? new Date(session.checkoutStartedAt).getTime()
+    : Number.NaN;
+  const displayNow = Number.isFinite(frozenMs) ? frozenMs : nowMs;
+  const checkoutFrozen = Boolean(session?.checkoutStartedAt);
 
   return (
     <button
       type="button"
       onClick={() => onSelect(table)}
       disabled={busy}
+      style={tableColorStyle(table.color)}
       className={cn(
-        'group relative flex min-h-[144px] flex-col overflow-hidden rounded-2xl border p-3.5 text-left transition',
+        'group relative flex min-h-[144px] flex-col overflow-hidden rounded-2xl border p-3.5 pl-4 text-left transition',
+        'table-border',
         occupied
-          ? 'border-slate-700/80 bg-gradient-to-br from-[#101d2b] to-[#0b1422] hover:border-emerald-500/50 hover:shadow-[0_16px_40px_-28px_rgba(16,185,129,0.7)]'
-          : 'border-slate-800 bg-[#0b1422] hover:border-emerald-500/40 hover:bg-[#0d1826]',
+          ? 'table-tint hover:shadow-[0_16px_40px_-28px_rgba(16,185,129,0.7)]'
+          : 'bg-[#0b1422] hover:bg-[#0d1826]',
         busy && 'opacity-60'
       )}
     >
-      <span
-        className={cn(
-          'absolute inset-x-0 top-0 h-0.5',
-          occupied ? 'bg-gradient-to-r from-rose-400 via-rose-500/60 to-transparent' : 'bg-gradient-to-r from-emerald-400 via-emerald-500/50 to-transparent'
-        )}
-      />
+      <span className="table-accent absolute inset-x-0 top-0 h-1" />
+      <span className="table-accent absolute inset-y-0 left-0 w-1 opacity-80" />
 
       <div className="flex w-full items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
-            Mesa {table.number}
-          </p>
-          <h3 className="truncate text-sm font-black text-white">{table.name}</h3>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="table-badge flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-black">
+            {table.number}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Mesa {table.number}
+            </p>
+            <h3 className="truncate text-sm font-black text-white">{table.name}</h3>
+          </div>
         </div>
         <span
           className={cn(
@@ -82,9 +93,26 @@ export const TableCard: React.FC<TableCardProps> = ({
               <p className="num text-2xl font-black leading-none tracking-tight text-white">
                 {calculation.timer}
               </p>
-              <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-500">
-                <UserRound className="h-3 w-3" />
-                Abrió {session.openedByName}
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] text-slate-500">
+                <span className="flex items-center gap-1">
+                  <UserRound className="h-3 w-3" />
+                  Abrió {session.openedByName}
+                </span>
+                {session.playerType === 'staff' ? (
+                  <span className="rounded border border-violet-500/25 bg-violet-500/10 px-1 py-px font-bold text-violet-300">
+                    Encargados
+                  </span>
+                ) : null}
+                {session.playerType === 'mixed' ? (
+                  <span className="rounded border border-violet-500/25 bg-violet-500/10 px-1 py-px font-bold text-violet-300">
+                    50% mesa
+                  </span>
+                ) : null}
+                {checkoutFrozen ? (
+                  <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1 py-px font-bold text-amber-300">
+                    Tiempo detenido
+                  </span>
+                ) : null}
               </p>
             </div>
             <span className="num rounded-md border border-slate-800 bg-[#08111d]/80 px-1.5 py-0.5 text-[9px] font-semibold text-slate-400">
@@ -111,7 +139,7 @@ export const TableCard: React.FC<TableCardProps> = ({
                 Salida
               </p>
               <p className="num mt-0.5 text-[11px] font-bold text-sky-200">
-                {formatClock(new Date(nowMs))}
+                {formatClock(new Date(displayNow))}
               </p>
             </div>
             <div
@@ -133,7 +161,7 @@ export const TableCard: React.FC<TableCardProps> = ({
               <span className="truncate">
                 Billar{' '}
                 <strong className="num font-semibold text-slate-300">
-                  {formatMoney(calculation.cost, currency)}
+                  {formatMoney(billiardAmount, currency)}
                 </strong>
                 <span className="px-1 text-slate-700">·</span>
                 Consumo{' '}
@@ -147,6 +175,13 @@ export const TableCard: React.FC<TableCardProps> = ({
               <ArrowRight className="ml-0.5 h-3 w-3 transition group-hover:translate-x-0.5" />
             </span>
           </div>
+
+          {session.notes?.trim() ? (
+            <div className="mt-2 flex w-full items-start gap-1.5 rounded-md border border-amber-500/25 bg-amber-500/[0.07] px-2 py-1.5 text-left text-[9px] leading-relaxed text-amber-200/90">
+              <StickyNote className="mt-0.5 h-3 w-3 shrink-0 text-amber-400" />
+              <span className="line-clamp-2">{session.notes}</span>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="flex flex-1 flex-col justify-between gap-3">

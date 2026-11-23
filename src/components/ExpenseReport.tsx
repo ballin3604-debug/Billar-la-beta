@@ -64,7 +64,7 @@ export const ExpenseReport: React.FC<ExpenseReportProps> = ({ shift }) => {
       <div className="flex items-start justify-between gap-4 border-b-2 border-slate-800 pb-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-            {settings?.businessName || 'Billar & Bar'}
+            {settings?.businessName || 'Billar Bar la Beta'}
           </p>
           <h1 className="mt-0.5 text-lg font-black uppercase tracking-tight">
             Planilla de gastos de caja
@@ -301,7 +301,7 @@ export const ExpenseReport: React.FC<ExpenseReportProps> = ({ shift }) => {
       </div>
 
       <p className="mt-4 border-t border-slate-200 pt-1 text-center text-[8px] text-slate-400">
-        Documento generado por el sistema local · {settings?.businessName || 'Billar & Bar'} · Este
+        Documento generado por el sistema local · {settings?.businessName || 'Billar Bar la Beta'} · Este
         reporte refleja los gastos registrados hasta el momento de la impresión.
       </p>
     </div>

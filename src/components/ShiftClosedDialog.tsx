@@ -103,7 +103,7 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
           </div>
 
           <p className="text-[10px] leading-relaxed text-slate-500">
-            La caja debe abrirla el administrador para el próximo turno.
+            Abre el próximo turno con tu PIN cuando estés listo.
           </p>
         </div>
       </Modal>
@@ -174,25 +174,29 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
 
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <div className="kpi">
-            <p className="label mb-1">Ventas totales</p>
+            <p className="label mb-1">Total V.P. + T.B. + C.</p>
             <p className="num text-base font-bold text-white">
-              {formatMoney(shift.totals.grossTotal, currency)}
+              {formatMoney(
+                shift.totals.totalWithChange ??
+                  Number(shift.initialCash || 0) + Number(shift.totals.grossTotal || 0),
+                currency
+              )}
             </p>
           </div>
           <div className="kpi">
-            <p className="label mb-1">Efectivo esperado</p>
+            <p className="label mb-1">Total Efectivo esperado</p>
             <p className="num text-base font-bold text-sky-300">
               {isAdmin && expected !== null ? formatMoney(expected, currency) : '—'}
             </p>
           </div>
           <div className="kpi">
-            <p className="label mb-1">Efectivo contado</p>
+            <p className="label mb-1">Total de Efectivo en Caja</p>
             <p className="num text-base font-bold text-emerald-300">
               {isAdmin && counted !== null ? formatMoney(counted, currency) : 'Registrado'}
             </p>
           </div>
           <div className="kpi">
-            <p className="label mb-1">Diferencia</p>
+            <p className="label mb-1">Saldo en contra (−) o a favor (+)</p>
             <p
               className={`num text-base font-bold ${
                 balanced ? 'text-emerald-300' : difference > 0 ? 'text-amber-300' : 'text-rose-300'
@@ -235,25 +239,25 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
                 </div>
               ) : null}
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Fondo inicial</span>
+                <span className="text-slate-500">Cambio</span>
                 <span className="num text-slate-300">{formatMoney(shift.initialCash, currency)}</span>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Billar</span>
+                <span className="text-slate-500">Tiempo Billar</span>
                 <span className="num text-slate-300">
                   {formatMoney(shift.totals.totalBilliard, currency)}
                 </span>
               </div>
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Productos</span>
+                <span className="text-slate-500">Venta de Productos</span>
                 <span className="num text-slate-300">
                   {formatMoney(shift.totals.totalProducts, currency)}
                 </span>
               </div>
               <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Gastos</span>
+                <span className="text-slate-500">Gastos de Caja</span>
                 <span className="num text-rose-300">
                   {formatMoney(shift.totals.totalExpenses, currency)}
                 </span>
@@ -273,7 +277,7 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
           <span className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
             {plural(shift.totals.playsCount, 'partida', 'partidas')} ·{' '}
-            {plural(shift.totals.salesCount, 'venta', 'ventas')} de barra
+            {plural(shift.totals.salesCount, 'venta de productos', 'ventas de productos')}
           </span>
           <span className="flex items-center gap-1.5">
             <CircleDollarSign className="h-3.5 w-3.5" />

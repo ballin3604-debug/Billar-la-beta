@@ -1,6 +1,6 @@
 {
-  "name": "Billar & Bar · Caja local",
-  "short_name": "Billar Caja",
+  "name": "Billar Bar la Beta · Caja local",
+  "short_name": "Billar Beta",
   "description": "Caja, mesas, ventas, arqueo y auditoría para billar y bar.",
   "start_url": "/",
   "display": "standalone",

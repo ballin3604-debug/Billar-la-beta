@@ -1,8 +1,21 @@
 export type Role = 'admin' | 'cashier';
-export type Tab = 'mesas' | 'caja' | 'historial' | 'ajustes' | 'egresos' | 'cierre';
+export type Tab = 'mesas' | 'caja' | 'historial' | 'ajustes' | 'egresos' | 'cierre' | 'ventas';
 export type PaymentMethod = 'efectivo' | 'qr' | 'mixto';
+export type TransferDirection = 'qr_to_cash' | 'cash_to_qr';
 export type ExpenseCategory = 'comida' | 'personal' | 'compras' | 'servicios' | 'otro';
 export type ProductCategory = 'cervezas' | 'bebidas' | 'snacks' | 'multas' | 'otros';
+export type TablePlayerType = 'normal' | 'staff' | 'mixed';
+export type TableColor =
+  | 'blue'
+  | 'violet'
+  | 'amber'
+  | 'sky'
+  | 'pink'
+  | 'lime'
+  | 'orange'
+  | 'teal'
+  | 'indigo'
+  | 'fuchsia';
 
 export interface User {
   id: number;
@@ -18,7 +31,11 @@ export interface Settings {
   currency: string;
   defaultRatePerHour: number;
   minimumPlayCharge: number;
+  defaultInitialCash: number;
   autoLockMinutes: number;
+  receiptPromotions: string;
+  thermalPrinterName: string;
+  rawPrintingEnabled: boolean;
 }
 
 export interface Product {
@@ -44,7 +61,11 @@ export interface ActiveSession {
   tableId: number;
   startTime: string;
   ratePerHour: number;
+  pausedSeconds: number;
+  checkoutStartedAt: string | null;
   openedByName: string;
+  playerType: TablePlayerType;
+  notes: string | null;
   items: SessionItem[];
   itemsAmount: number;
 }
@@ -54,6 +75,7 @@ export interface Table {
   number: number;
   name: string;
   ratePerHour: number;
+  color: TableColor;
   active: boolean;
   status: 'available' | 'occupied';
   activeSession: ActiveSession | null;
@@ -63,15 +85,26 @@ export interface ShiftTotals {
   totalBilliard: number;
   totalProducts: number;
   tableProducts: number;
+  customerTabProducts?: number;
   barSales: number;
   grossTotal: number;
+  totalWithChange?: number;
   totalQr: number;
+  totalQrNet?: number;
   totalExpenses: number;
   cashCollected?: number;
   expectedCash?: number;
+  pendingBilliard?: number;
+  pendingProducts?: number;
+  pendingTotal?: number;
+  cashTransfersIn?: number;
+  cashTransfersOut?: number;
+  transfersCount?: number;
   playsCount: number;
   salesCount: number;
   expensesCount: number;
+  openSessionsCount?: number;
+  openTabsCount?: number;
   itemsCount: number;
 }
 
@@ -102,6 +135,7 @@ export interface Play {
   voidedAt: string | null;
   voidReason: string | null;
   createdAt: string;
+  playerType: TablePlayerType;
   items: SessionItem[];
 }
 
@@ -111,6 +145,62 @@ export interface SaleItem {
   name: string;
   price: number;
   quantity: number;
+}
+
+export interface CustomerTabItem {
+  id: number;
+  productId: number | null;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export interface CustomerTab {
+  id: number;
+  shiftId: number;
+  customerName: string;
+  openedByName: string;
+  createdAt: string;
+  status: 'open' | 'charged' | 'cancelled';
+  items: CustomerTabItem[];
+  itemsAmount: number;
+  outsideShiftDate?: boolean;
+}
+
+export interface ShiftOpenSession {
+  id: number;
+  shiftId: number;
+  tableId: number;
+  tableNumber: number;
+  tableName: string;
+  startTime: string;
+  ratePerHour: number;
+  pausedSeconds: number;
+  checkoutStartedAt: string | null;
+  openedByName: string;
+  playerType: TablePlayerType;
+  notes: string | null;
+  durationMinutes: number;
+  seconds: number;
+  timer: string;
+  billiardAmount: number;
+  productsAmount: number;
+  totalAmount: number;
+  items: SessionItem[];
+  itemsAmount: number;
+  outsideShiftDate: boolean;
+}
+
+export interface ShiftOutOfRangeDate {
+  date: string;
+  count: number;
+  total: number;
+}
+
+export interface ShiftOutOfRange {
+  count: number;
+  total: number;
+  dates: ShiftOutOfRangeDate[];
 }
 
 export interface Sale {
@@ -124,6 +214,7 @@ export interface Sale {
   qrAmount: number;
   qrReference: string | null;
   notes: string | null;
+  customerName?: string | null;
   status: 'active' | 'voided';
   voidedByName: string | null;
   voidedAt: string | null;
@@ -155,6 +246,21 @@ export interface Expense {
   items: ExpenseItem[];
 }
 
+export interface CashTransfer {
+  id: number;
+  shiftId: number;
+  createdByName: string;
+  createdAt: string;
+  direction: TransferDirection;
+  amount: number;
+  concept: string;
+  reference: string | null;
+  status: 'active' | 'voided';
+  voidedByName: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+}
+
 export interface QrPayment {
   id: string;
   refId: number;
@@ -171,6 +277,7 @@ export interface TableSummary {
   tableNumber: number;
   tableName: string;
   playsCount: number;
+  openCount?: number;
   billiard: number;
   products: number;
   total: number;
@@ -226,9 +333,13 @@ export interface ShiftDetail {
   tablePlays: Play[];
   sales: Sale[];
   expenses: Expense[];
+  cashTransfers: CashTransfer[];
   qrPayments: QrPayment[];
   tableSummary: TableSummary[];
   productSummary: ProductSummaryRow[];
+  openSessions?: ShiftOpenSession[];
+  openCustomerTabs?: CustomerTab[];
+  outOfRange?: ShiftOutOfRange | null;
   attendance: StaffAttendance[];
   closing: ClosingInfo | null;
   audit?: AuditEntry[];
@@ -254,6 +365,7 @@ export interface AppState {
   settings: Settings;
   tables: Table[];
   products: Product[];
+  customerTabs: CustomerTab[];
   currentShift: ShiftDetail | null;
   users?: User[];
   attendanceToday: StaffAttendance | null;
@@ -288,6 +400,7 @@ export interface ReceiptData {
   shiftId: number;
   cashier: string;
   tableName?: string;
+  customerName?: string;
   durationMinutes?: number;
   startTime?: string;
   endTime?: string;
@@ -302,6 +415,9 @@ export interface ReceiptData {
   notes?: string | null;
   received?: number;
   change?: number;
+  reprint?: boolean;
+  promotions?: string;
+  playerType?: TablePlayerType;
 }
 
 export interface MutationResponse {
@@ -309,6 +425,7 @@ export interface MutationResponse {
   state?: AppState;
   message?: string;
   closedShift?: ShiftDetail;
+  sale?: Sale;
   backup?: BackupInfo;
   backups?: BackupInfo[];
   shifts?: ShiftHistoryItem[];

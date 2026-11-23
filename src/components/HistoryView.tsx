@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   TrendingDown,
   Wallet,
+  X,
 } from 'lucide-react';
 import type { ShiftDetail, ShiftHistoryItem } from '../types';
 import { useApp } from '../context/AppContext';
@@ -38,6 +39,9 @@ export const HistoryView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos');
   const [query, setQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [reportShift, setReportShift] = useState<ShiftDetail | null>(null);
   const [expenseReportShift, setExpenseReportShift] = useState<ShiftDetail | null>(null);
@@ -63,9 +67,45 @@ export const HistoryView: React.FC = () => {
     load();
   }, [load]);
 
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
+  const handleDateFromChange = (value: string) => {
+    setDateFrom(value);
+    if (value && dateTo && value > dateTo) setDateTo(value);
+  };
+
+  const handleDateToChange = (value: string) => {
+    setDateTo(value);
+    if (value && dateFrom && value < dateFrom) setDateFrom(value);
+  };
+
+  const clearDateFilter = () => {
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const dateFilterDescription = !hasDateFilter
+    ? 'Elige una fecha o un rango. Se incluyen ambos días.'
+    : dateFrom && dateTo
+      ? `Del ${formatDateShort(dateFrom)} al ${formatDateShort(dateTo)}`
+      : dateFrom
+        ? `Desde ${formatDateShort(dateFrom)}`
+        : `Hasta ${formatDateShort(dateTo)}`;
+
+  const dateFiltered = useMemo(() => {
+    if (!dateFrom && !dateTo) return shifts;
+    return shifts.filter((shift) => {
+      const start = shift.dateStart;
+      const end = shift.dateEnd || (shift.status === 'open' ? '9999-12-31' : start);
+      if (dateFrom && end < dateFrom) return false;
+      if (dateTo && start > dateTo) return false;
+      return true;
+    });
+  }, [dateFrom, dateTo, shifts]);
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return shifts.filter((shift) => {
+    return dateFiltered.filter((shift) => {
       if (statusFilter === 'abiertos' && shift.status !== 'open') return false;
       if (statusFilter === 'cerrados' && shift.status !== 'closed') return false;
       if (!term) return true;
@@ -76,26 +116,32 @@ export const HistoryView: React.FC = () => {
         (shift.closedByName || '').toLowerCase().includes(term)
       );
     });
-  }, [query, shifts, statusFilter]);
+  }, [dateFiltered, query, statusFilter]);
 
   const summary = useMemo(() => {
-    const closed = shifts.filter((shift) => shift.status === 'closed');
-    const totalSales = shifts.reduce((sum, shift) => sum + Number(shift.totals.grossTotal || 0), 0);
-    const totalQr = shifts.reduce((sum, shift) => sum + Number(shift.totals.totalQr || 0), 0);
+    const closed = dateFiltered.filter((shift) => shift.status === 'closed');
+    const totalSales = dateFiltered.reduce(
+      (sum, shift) => sum + Number(shift.totals.grossTotal || 0),
+      0
+    );
+    const totalQr = dateFiltered.reduce(
+      (sum, shift) => sum + Number(shift.totals.totalQr || 0),
+      0
+    );
     const discrepancies = closed.filter((shift) => shift.hasDiscrepancy).length;
     return {
-      total: shifts.length,
+      total: dateFiltered.length,
       closed: closed.length,
       totalSales,
       totalQr,
       discrepancies,
     };
-  }, [shifts]);
+  }, [dateFiltered]);
 
   const counts = {
-    todos: shifts.length,
-    abiertos: shifts.filter((shift) => shift.status === 'open').length,
-    cerrados: shifts.filter((shift) => shift.status === 'closed').length,
+    todos: dateFiltered.length,
+    abiertos: dateFiltered.filter((shift) => shift.status === 'open').length,
+    cerrados: dateFiltered.filter((shift) => shift.status === 'closed').length,
   };
 
   const exportFile = async (kind: 'plays' | 'shifts') => {
@@ -117,7 +163,7 @@ export const HistoryView: React.FC = () => {
         <div>
           <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">Historial de turnos</h1>
           <p className="mt-1 text-xs text-slate-500">
-            Consulta cierres anteriores, diferencias de caja y planillas firmadas.
+            Consulta cierres anteriores, saldos en contra o a favor y planillas firmadas.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -158,14 +204,14 @@ export const HistoryView: React.FC = () => {
           tone="slate"
         />
         <StatCard
-          label="Ventas acumuladas"
+          label="Venta de Productos + Tiempo Billar"
           value={formatMoney(summary.totalSales, currency)}
-          hint="Billar + productos"
+          hint="En todos los turnos"
           icon={<Wallet className="h-4 w-4" />}
           tone="emerald"
         />
         <StatCard
-          label="Cobrado por QR"
+          label="QR"
           value={formatMoney(summary.totalQr, currency)}
           hint="En todos los turnos"
           icon={<CalendarRange className="h-4 w-4" />}
@@ -173,12 +219,12 @@ export const HistoryView: React.FC = () => {
         />
         {isAdmin ? (
           <StatCard
-            label="Turnos con diferencia"
+            label="Turnos con saldo en contra/favor"
             value={summary.discrepancies}
             hint={
               summary.discrepancies === 1
-                ? 'Requiere revisión del dueño'
-                : 'Requieren revisión del dueño'
+                ? 'Requiere revisión del encargado'
+                : 'Requieren revisión del encargado'
             }
             icon={<ShieldAlert className="h-4 w-4" />}
             tone={summary.discrepancies > 0 ? 'amber' : 'emerald'}
@@ -215,16 +261,87 @@ export const HistoryView: React.FC = () => {
             ))}
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-            <input
-              className="input pl-8"
-              placeholder="Buscar por fecha, turno o encargado…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <button
+              type="button"
+              className={cn(
+                'btn-secondary w-full justify-center whitespace-nowrap sm:w-auto',
+                hasDateFilter &&
+                  'border-emerald-500/50 bg-emerald-500/10 text-emerald-200 hover:border-emerald-400/60 hover:bg-emerald-500/15'
+              )}
+              onClick={() => setDateFilterOpen((open) => !open)}
+              aria-expanded={dateFilterOpen}
+              title="Filtrar el historial por rango de fechas"
+            >
+              <CalendarRange className="h-4 w-4 text-emerald-400" />
+              Fechas
+              {hasDateFilter ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+            </button>
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              <input
+                className="input pl-8"
+                placeholder="Buscar por fecha, turno o encargado…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
           </div>
         </div>
+
+        {dateFilterOpen ? (
+          <div className="border-b border-slate-800/80 bg-[#08111d] px-4 py-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="w-full sm:w-40">
+                <label htmlFor="history-date-from" className="label">
+                  Desde
+                </label>
+                <input
+                  id="history-date-from"
+                  type="date"
+                  className="input [color-scheme:dark]"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(event) => handleDateFromChange(event.target.value)}
+                />
+              </div>
+              <div className="w-full sm:w-40">
+                <label htmlFor="history-date-to" className="label">
+                  Hasta
+                </label>
+                <input
+                  id="history-date-to"
+                  type="date"
+                  className="input [color-scheme:dark]"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(event) => handleDateToChange(event.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={clearDateFilter}
+                  disabled={!hasDateFilter}
+                >
+                  <X className="h-4 w-4" />
+                  Limpiar
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost border border-slate-800"
+                  onClick={() => setDateFilterOpen(false)}
+                >
+                  Cerrar
+                </button>
+              </div>
+              <p className="text-[10px] leading-relaxed text-slate-500 sm:ml-auto sm:max-w-[240px] sm:text-right">
+                {dateFilterDescription}
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {error ? (
           <EmptyState
@@ -250,7 +367,9 @@ export const HistoryView: React.FC = () => {
             description={
               shifts.length === 0
                 ? 'Cuando abras y cierres la primera caja, aparecerá aquí.'
-                : 'Prueba con otro filtro o término de búsqueda.'
+                : hasDateFilter && dateFiltered.length === 0
+                  ? 'No hay turnos entre las fechas seleccionadas.'
+                  : 'Prueba con otro filtro o término de búsqueda.'
             }
             icon={<History className="h-6 w-6" />}
             className="m-4"
@@ -264,10 +383,10 @@ export const HistoryView: React.FC = () => {
                   <th>Apertura</th>
                   <th>Cierre</th>
                   <th>Encargado</th>
-                  <th className="text-right">Ventas</th>
+                  <th className="text-right">Venta de Productos + Tiempo Billar</th>
                   <th className="text-right">QR</th>
-                  <th className="text-right">Gastos</th>
-                  {isAdmin ? <th className="text-right">Diferencia</th> : null}
+                  <th className="text-right">Gastos de Caja</th>
+                  {isAdmin ? <th className="text-right">Saldo en contra/favor</th> : null}
                   <th>Estado</th>
                   <th className="text-right">Detalle</th>
                 </tr>
@@ -372,7 +491,8 @@ export const HistoryView: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 bg-[#08111d] px-4 py-2.5 text-[10px] text-slate-500">
           <span>
             {plural(filtered.length, 'turno', 'turnos')}{' '}
-            {filtered.length === 1 ? 'visible' : 'visibles'} de {shifts.length}
+            {filtered.length === 1 ? 'visible' : 'visibles'} de {dateFiltered.length}
+            {hasDateFilter ? ' en el rango' : ''}
           </span>
           <span className="flex items-center gap-1.5">
             <TrendingDown className="h-3.5 w-3.5 text-slate-600" />

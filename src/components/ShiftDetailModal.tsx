@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeftRight,
   Ban,
   ClipboardList,
   Clock3,
@@ -32,6 +33,8 @@ import {
   paymentLabel,
   plural,
   roleLabel,
+  transferCashEffectLabel,
+  transferDirectionLabel,
 } from '../lib/format';
 import { Modal } from './ui/Modal';
 import { EmptyState } from './ui/EmptyState';
@@ -43,7 +46,7 @@ interface ShiftDetailModalProps {
   onPrintExpenses: (shift: ShiftDetail) => void;
 }
 
-type DetailTab = 'resumen' | 'partidas' | 'barra' | 'gastos' | 'auditoria';
+type DetailTab = 'resumen' | 'partidas' | 'barra' | 'gastos' | 'traspasos' | 'auditoria';
 
 const attendanceDuration = (checkInAt: string, checkOutAt: string) => {
   const start = new Date(checkInAt).getTime();
@@ -77,6 +80,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
   const [tab, setTab] = useState<DetailTab>('resumen');
   const currency = settings?.currency || 'Bs';
   const isAdmin = user?.role === 'admin';
+  const cashTransfers = shift?.cashTransfers ?? [];
 
   const load = useCallback(async () => {
     if (!shiftId) return;
@@ -106,11 +110,14 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
     { id: 'partidas', label: 'Partidas', count: shift?.tablePlays.length },
     { id: 'barra', label: 'Barra', count: shift?.sales.length },
     { id: 'gastos', label: 'Gastos', count: shift?.expenses.length },
+    { id: 'traspasos', label: 'Traspasos', count: cashTransfers.length },
     { id: 'auditoria', label: 'Auditoría', count: shift?.audit?.length, adminOnly: true },
   ];
 
   const difference = shift?.closing?.difference ?? null;
   const hasDifference = difference !== null && Math.abs(Number(difference)) > 0.009;
+  const transfersNet =
+    Number(shift?.totals.cashTransfersIn ?? 0) - Number(shift?.totals.cashTransfersOut ?? 0);
 
   return (
     <Modal
@@ -186,31 +193,38 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
 
           <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
             <div className="kpi">
-              <p className="label mb-1">Ventas totales</p>
+              <p className="label mb-1">Total V.P. + T.B. + C.</p>
               <p className="num text-base font-bold text-emerald-300">
-                {formatMoney(shift.totals.grossTotal, currency)}
+                {formatMoney(
+                  shift.totals.totalWithChange ??
+                    Number(shift.initialCash || 0) + Number(shift.totals.grossTotal || 0),
+                  currency
+                )}
+              </p>
+              <p className="mt-0.5 text-[9px] text-slate-500">
+                Venta de Productos + Tiempo Billar + Cambio
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Billar</p>
+              <p className="label mb-1">Tiempo Billar</p>
               <p className="num text-base font-bold text-sky-300">
                 {formatMoney(shift.totals.totalBilliard, currency)}
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Productos</p>
+              <p className="label mb-1">Venta de Productos</p>
               <p className="num text-base font-bold text-violet-300">
                 {formatMoney(shift.totals.totalProducts, currency)}
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Cobrado por QR</p>
+              <p className="label mb-1">QR</p>
               <p className="num text-base font-bold text-sky-300">
                 {formatMoney(shift.totals.totalQr, currency)}
               </p>
             </div>
             <div className="kpi">
-              <p className="label mb-1">Diferencia de caja</p>
+              <p className="label mb-1">Saldo en contra (−) o a favor (+)</p>
               <p
                 className={cn(
                   'num text-base font-bold',
@@ -227,10 +241,24 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                   ? shift.status === 'open'
                     ? 'En curso'
                     : '—'
-                  : `${Number(difference) > 0 ? '+' : ''}${formatMoney(difference, currency)}`}
+                  : `${Number(difference) > 0 ? '+' : Number(difference) < 0 ? '−' : ''}${formatMoney(
+                      Math.abs(Number(difference)),
+                      currency
+                    )}`}
               </p>
             </div>
           </div>
+          {Number(shift.totals.pendingTotal || 0) > 0 ? (
+            <p className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-[10px] text-amber-200/90">
+              Incluye {formatMoney(shift.totals.pendingTotal, currency)} de consumo por cobrar en{' '}
+              {plural(
+                Number(shift.totals.openSessionsCount || 0) + Number(shift.totals.openTabsCount || 0),
+                'mesa o cliente abierto',
+                'mesas o clientes abiertos'
+              )}
+              . Ese monto todavía no está en caja.
+            </p>
+          ) : null}
 
           <div className="scroll-thin flex gap-1.5 overflow-x-auto border-b border-slate-800 pb-2">
             {tabs
@@ -316,6 +344,32 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 </div>
               )}
 
+              {shift.outOfRange ? (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3.5">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-200">
+                        Movimientos de otras fechas no incluidos
+                      </p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-amber-200/80">
+                        El turno corresponde solo al {formatDateShort(shift.dateStart)}. Estos
+                        movimientos no se suman a los totales de la planilla:
+                      </p>
+                      <ul className="mt-1.5 space-y-0.5 text-[10px] text-amber-100/90">
+                        {shift.outOfRange.dates.map((item) => (
+                          <li key={item.date}>
+                            {formatDateShort(item.date)} ·{' '}
+                            {plural(item.count, 'movimiento', 'movimientos')} ·{' '}
+                            <span className="num font-bold">{formatMoney(item.total, currency)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-xl border border-slate-800 bg-[#08111d]">
                 <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                   <Clock3 className="h-4 w-4 text-slate-500" />
@@ -364,12 +418,83 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 )}
               </div>
 
+              {Number(shift.totals.pendingTotal || 0) > 0 ? (
+                <div className="rounded-xl border border-slate-800 bg-[#08111d]">
+                  <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
+                    <Clock3 className="h-4 w-4 text-slate-500" />
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Mesas y clientes abiertos
+                    </p>
+                    <span className="ml-auto text-[10px] font-bold text-amber-300">
+                      {formatMoney(shift.totals.pendingTotal, currency)} por cobrar
+                    </span>
+                  </div>
+                  <table className="data-table">
+                    <thead className="table-head">
+                      <tr>
+                        <th>Mesa / cliente</th>
+                        <th>Entrada</th>
+                        <th>Duración</th>
+                        <th className="text-right">Tiempo Billar</th>
+                        <th className="text-right">Venta de Productos</th>
+                        <th className="text-right">Total</th>
+                        <th>Nota</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(shift.openSessions ?? []).map((session) => (
+                        <tr key={`session-${session.id}`}>
+                          <td className="font-medium text-slate-200">
+                            {session.tableName}
+                            {session.outsideShiftDate ? (
+                              <span className="ml-1 text-[9px] text-slate-500">(otra fecha)</span>
+                            ) : null}
+                          </td>
+                          <td className="num text-[10px] text-slate-400">
+                            {formatDateTime(session.startTime)}
+                          </td>
+                          <td className="num">{session.timer}</td>
+                          <td className="num text-right">{formatMoney(session.billiardAmount, currency)}</td>
+                          <td className="num text-right">{formatMoney(session.productsAmount, currency)}</td>
+                          <td className="num text-right font-bold text-slate-200">
+                            {formatMoney(session.totalAmount, currency)}
+                          </td>
+                          <td className="max-w-[180px] truncate text-slate-400">{session.notes || '—'}</td>
+                        </tr>
+                      ))}
+                      {(shift.openCustomerTabs ?? []).map((tab) => (
+                        <tr key={`tab-${tab.id}`}>
+                          <td className="font-medium text-slate-200">
+                            Cliente: {tab.customerName}
+                            {tab.outsideShiftDate ? (
+                              <span className="ml-1 text-[9px] text-slate-500">(otra fecha)</span>
+                            ) : null}
+                          </td>
+                          <td className="num text-[10px] text-slate-400">
+                            {formatDateTime(tab.createdAt)}
+                          </td>
+                          <td className="text-slate-500">—</td>
+                          <td className="num text-right">{formatMoney(0, currency)}</td>
+                          <td className="num text-right">{formatMoney(tab.itemsAmount, currency)}</td>
+                          <td className="num text-right font-bold text-slate-200">
+                            {formatMoney(tab.itemsAmount, currency)}
+                          </td>
+                          <td className="max-w-[180px] truncate text-slate-400">
+                            {tab.items.map((item) => `${item.quantity}× ${item.name}`).join(', ') || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-[#08111d]">
                   <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                     <TableProperties className="h-4 w-4 text-slate-500" />
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Resumen por mesa
+                      Tiempo Billar y Venta de Productos por mesa
                     </p>
                   </div>
                   {shift.tableSummary.length === 0 ? (
@@ -379,9 +504,9 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                       <thead className="table-head">
                         <tr>
                           <th>Mesa</th>
-                          <th className="text-center">N°</th>
-                          <th className="text-right">Billar</th>
-                          <th className="text-right">Productos</th>
+                          <th className="text-center">Partidas</th>
+                          <th className="text-right">Tiempo Billar</th>
+                          <th className="text-right">Venta de Productos</th>
                           <th className="text-right">Total</th>
                         </tr>
                       </thead>
@@ -389,7 +514,14 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                         {shift.tableSummary.map((row) => (
                           <tr key={row.tableId}>
                             <td className="font-medium text-slate-200">{row.tableName}</td>
-                            <td className="num text-center">{row.playsCount}</td>
+                            <td className="num text-center">
+                              {row.playsCount}
+                              {Number(row.openCount || 0) > 0 ? (
+                                <span className="ml-1 text-[9px] text-slate-500">
+                                  +{row.openCount}
+                                </span>
+                              ) : null}
+                            </td>
                             <td className="num text-right">{formatMoney(row.billiard, currency)}</td>
                             <td className="num text-right">{formatMoney(row.products, currency)}</td>
                             <td className="num text-right font-bold text-slate-200">
@@ -406,7 +538,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                   <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                     <ShoppingBag className="h-4 w-4 text-slate-500" />
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Productos vendidos
+                      Venta de Productos
                     </p>
                   </div>
                   {shift.productSummary.length === 0 ? (
@@ -435,23 +567,38 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
               </div>
 
               <div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
-                <div className="grid gap-3 text-[11px] sm:grid-cols-3">
+                <div className="grid gap-3 text-[11px] sm:grid-cols-4">
                   <div>
-                    <p className="label mb-1">Fondo inicial</p>
+                    <p className="label mb-1">Cambio</p>
                     <p className="num text-sm font-bold text-slate-200">
                       {formatMoney(shift.initialCash, currency)}
                     </p>
                   </div>
                   <div>
-                    <p className="label mb-1">Gastos</p>
+                    <p className="label mb-1">Gastos de Caja</p>
                     <p className="num text-sm font-bold text-rose-300">
                       {formatMoney(shift.totals.totalExpenses, currency)}
                     </p>
                   </div>
                   <div>
-                    <p className="label mb-1">Pagos QR</p>
+                    <p className="label mb-1">QR</p>
                     <p className="num text-sm font-bold text-sky-300">
                       {plural(shift.qrPayments.length, 'movimiento', 'movimientos')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="label mb-1">Traspasos (neto en caja)</p>
+                    <p
+                      className={cn(
+                        'num text-sm font-bold',
+                        transfersNet < 0 ? 'text-amber-300' : 'text-emerald-300'
+                      )}
+                    >
+                      {transfersNet > 0 ? '+' : ''}
+                      {formatMoney(transfersNet, currency)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      {plural(shift.totals.transfersCount ?? 0, 'traspaso', 'traspasos')}
                     </p>
                   </div>
                 </div>
@@ -470,8 +617,8 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                       <th>Mesa</th>
                       <th>Entrada → salida</th>
                       <th>Duración</th>
-                      <th>Billar</th>
-                      <th>Consumo</th>
+                      <th>Tiempo Billar</th>
+                      <th>Venta de Productos</th>
                       <th>Total</th>
                       <th>Pago</th>
                       <th>Estado</th>
@@ -514,11 +661,13 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                   <ReceiptText className="h-4 w-4 text-slate-500" />
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Ventas de barra
+                    Venta de Productos (barra)
                   </p>
                 </div>
                 {shift.sales.length === 0 ? (
-                  <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin ventas de barra.</p>
+                  <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">
+                    Sin venta de productos en barra.
+                  </p>
                 ) : (
                   <table className="data-table">
                     <thead className="table-head">
@@ -564,7 +713,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                   <ShieldCheck className="h-4 w-4 text-slate-500" />
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Pagos QR
+                    QR
                   </p>
                 </div>
                 {shift.qrPayments.length === 0 ? (
@@ -665,6 +814,84 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 </div>
               )}
             </div>
+          ) : null}
+
+          {tab === 'traspasos' ? (
+            cashTransfers.length === 0 ? (
+              <EmptyState
+                title="Sin traspasos QR ↔ efectivo"
+                description="Los intercambios de efectivo por QR registrados en este turno aparecerán aquí."
+                icon={<ArrowLeftRight className="h-6 w-6" />}
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="data-table min-w-[720px]">
+                  <thead className="table-head">
+                    <tr>
+                      <th>Hora / registró</th>
+                      <th>Movimiento</th>
+                      <th>Concepto</th>
+                      <th>Referencia</th>
+                      <th>Efecto en caja</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashTransfers.map((transfer) => {
+                      const cashOut = transfer.direction === 'qr_to_cash';
+                      return (
+                        <tr
+                          key={transfer.id}
+                          className={transfer.status === 'voided' ? 'opacity-55' : ''}
+                        >
+                          <td>
+                            <p className="num text-slate-200">{formatClock(transfer.createdAt)}</p>
+                            <p className="text-[10px] text-slate-500">{transfer.createdByName}</p>
+                          </td>
+                          <td>
+                            <span
+                              className={cn(
+                                'inline-flex rounded-md border px-1.5 py-0.5 text-[9px] font-bold',
+                                cashOut
+                                  ? 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+                                  : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                              )}
+                            >
+                              {transferDirectionLabel(transfer.direction)}
+                            </span>
+                          </td>
+                          <td className="max-w-[200px] text-slate-300">{transfer.concept}</td>
+                          <td className="max-w-[140px] truncate text-slate-500">
+                            {transfer.reference || '—'}
+                          </td>
+                          <td
+                            className={cn(
+                              'num font-bold',
+                              cashOut ? 'text-amber-300' : 'text-emerald-300'
+                            )}
+                          >
+                            {cashOut ? '−' : '+'}
+                            {formatMoney(transfer.amount, currency)}
+                            <span className="ml-1 text-[9px] font-normal text-slate-500">
+                              {transferCashEffectLabel(transfer.direction)}
+                            </span>
+                          </td>
+                          <td>
+                            {transfer.status === 'voided' ? (
+                              <span className="text-[9px] font-bold text-rose-300">
+                                Anulado{transfer.voidReason ? `: ${transfer.voidReason}` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-emerald-300">Vigente</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
           ) : null}
 
           {tab === 'auditoria' && isAdmin ? (

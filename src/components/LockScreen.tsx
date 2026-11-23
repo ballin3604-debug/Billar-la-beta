@@ -35,7 +35,7 @@ export const LockScreen: React.FC = () => {
           <Logo size="md" />
           <div>
             <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-emerald-400">
-              {settings?.businessName || 'Billar & Bar'}
+              {settings?.businessName || 'Billar Bar la Beta'}
             </p>
             <p className="text-sm font-bold text-white">Sistema de caja</p>
           </div>

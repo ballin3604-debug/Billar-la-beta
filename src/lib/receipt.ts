@@ -1,4 +1,5 @@
 import type { AppState, Play, ReceiptData, Sale, Settings } from '../types';
+import { api } from './api';
 import {
   durationLabel,
   formatClock,
@@ -66,6 +67,8 @@ export function playToReceipt(
     qrReference: play.qrReference,
     notes: play.notes,
     ...paymentExtras(Number(play.totalAmount), play.paymentMethod, received),
+    promotions: String(settings.receiptPromotions || '').trim() || undefined,
+    playerType: play.playerType,
   };
 }
 
@@ -82,6 +85,7 @@ export function saleToReceipt(
     createdAt: sale.createdAt,
     shiftId: sale.shiftId,
     cashier: sale.createdByName,
+    customerName: sale.customerName || undefined,
     items: sale.items.map((item) => ({
       name: item.name,
       price: Number(item.price),
@@ -96,6 +100,7 @@ export function saleToReceipt(
     qrReference: sale.qrReference,
     notes: sale.notes,
     ...paymentExtras(Number(sale.totalAmount), sale.paymentMethod, received),
+    promotions: String(settings.receiptPromotions || '').trim() || undefined,
   };
 }
 
@@ -119,44 +124,66 @@ export function findNewSale(state: AppState | undefined) {
 export const RECEIPT_CSS = `
   .receipt-paper {
     width: 100%;
-    max-width: 72mm;
+    max-width: 48mm;
     margin: 0 auto;
-    color: #0f172a;
+    color: #000;
     font-family: "Cascadia Mono", "Consolas", "Courier New", monospace;
-    font-size: 10.5px;
-    line-height: 1.5;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0;
   }
   .receipt-paper * { box-sizing: border-box; }
-  .receipt-paper .receipt-header { text-align: center; }
+  .receipt-paper .receipt-header { text-align: center; margin-bottom: 1px; }
   .receipt-paper .receipt-business {
-    font-size: 15px;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    line-height: 1.2;
+    font-size: 12.5px;
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: 0.01em;
   }
   .receipt-paper .receipt-sub {
-    margin-top: 2px;
-    color: #475569;
-    font-size: 9px;
-    letter-spacing: 0.12em;
+    color: #000;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .receipt-paper .receipt-reprint {
+    display: inline-block;
+    margin-top: 1px;
+    border: 1px solid #000;
+    padding: 0 3px;
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
   .receipt-paper .receipt-rule {
-    margin: 8px 0;
-    border-top: 1px dashed #94a3b8;
+    margin: 2px 0;
+    border-top: 1px dashed #000;
   }
   .receipt-paper .receipt-row {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 4px;
   }
-  .receipt-paper .receipt-row > span:last-child { text-align: right; }
-  .receipt-paper .receipt-strong { font-weight: 700; }
+  .receipt-paper .receipt-row > span:first-child { min-width: 0; }
+  .receipt-paper .receipt-row > span:last-child {
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .receipt-paper .receipt-strong { font-weight: 800; }
   .receipt-paper .receipt-center { text-align: center; }
   .receipt-paper .receipt-title {
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+  }
+  .receipt-paper .receipt-meta {
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
   }
   .receipt-paper .receipt-items {
     width: 100%;
@@ -164,56 +191,78 @@ export const RECEIPT_CSS = `
   }
   .receipt-paper .receipt-items th,
   .receipt-paper .receipt-items td {
-    padding: 2px 0;
+    padding: 1px 0;
     vertical-align: top;
   }
   .receipt-paper .receipt-items th {
-    border-bottom: 1px solid #cbd5e1;
-    color: #64748b;
-    font-size: 8.5px;
-    letter-spacing: 0.06em;
+    border-bottom: 1px solid #000;
+    color: #000;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
   }
-  .receipt-paper .receipt-qty { width: 11%; text-align: left; }
+  .receipt-paper .receipt-qty { width: 12%; text-align: left; white-space: nowrap; }
   .receipt-paper .receipt-amount {
-    width: 30%;
+    width: 36%;
     text-align: right;
     white-space: nowrap;
+    font-size: 10px;
+    font-weight: 700;
   }
   .receipt-paper .receipt-items td.receipt-amount { text-align: right; }
-  .receipt-paper .receipt-item-name { word-break: break-word; }
+  .receipt-paper .receipt-item-name { word-break: break-word; padding-right: 2px; }
   .receipt-paper .receipt-total {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px solid #0f172a;
+    gap: 4px;
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top: 1.5px solid #000;
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 900;
+    line-height: 1.1;
   }
-  .receipt-paper .receipt-small {
-    margin-top: 3px;
-    color: #475569;
+  .receipt-paper .receipt-total > span:last-child { white-space: nowrap; }
+  .receipt-paper .receipt-total-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .receipt-paper .receipt-pay-tag {
     font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .receipt-paper .receipt-split {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 8.5px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .receipt-paper .receipt-split-bar { font-weight: 500; }
+  .receipt-paper .receipt-small {
+    color: #000;
+    font-size: 8.5px;
+    font-weight: 600;
+    line-height: 1.2;
   }
   .receipt-paper .receipt-note {
-    margin-top: 8px;
-    font-size: 9.5px;
-    line-height: 1.4;
+    margin-top: 2px;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1.2;
   }
   .receipt-paper .receipt-thanks {
-    margin-top: 4px;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 700;
-  }
-  .receipt-paper .receipt-legal {
     margin-top: 2px;
-    color: #64748b;
-    font-size: 8px;
-    letter-spacing: 0.04em;
     text-align: center;
+    font-size: 10px;
+    font-weight: 900;
   }
 `;
 
@@ -226,7 +275,7 @@ export function receiptBodyHtml(receipt: ReceiptData) {
   const itemsRows = receipt.items
     .map(
       (item) => `<tr>
-        <td class="receipt-qty">${item.quantity}×</td>
+        <td class="receipt-qty">${item.quantity}x</td>
         <td class="receipt-item-name">${escapeHtml(item.name)}</td>
         <td class="receipt-amount">${escapeHtml(money(item.price * item.quantity))}</td>
       </tr>`
@@ -234,24 +283,33 @@ export function receiptBodyHtml(receipt: ReceiptData) {
     .join('');
 
   const title =
-    receipt.kind === 'table' ? escapeHtml(receipt.tableName || 'Mesa') : 'VENTA DE BARRA';
+    receipt.kind === 'table'
+      ? escapeHtml(receipt.tableName || 'Mesa')
+      : receipt.customerName
+      ? 'VENTA POR CLIENTE'
+      : 'VENTA DE BARRA';
+  const playerTypeNote =
+    receipt.kind === 'table' && receipt.playerType === 'staff'
+      ? '<div class="receipt-center receipt-small receipt-strong">Encargados (sin cobro de billar)</div>'
+      : receipt.kind === 'table' && receipt.playerType === 'mixed'
+      ? '<div class="receipt-center receipt-small receipt-strong">Encargado + cliente (50% billar)</div>'
+      : '';
   const detail =
     receipt.kind === 'table'
-      ? `<div class="receipt-center">${escapeHtml(
+      ? `<div class="receipt-center receipt-meta">${escapeHtml(
           durationLabel(receipt.durationMinutes || 0)
-        )} · ${formatClock(receipt.startTime)} → ${formatClock(receipt.endTime)}</div>`
-      : '<div class="receipt-center">Consumo en barra</div>';
+        )} · ${formatClock(receipt.startTime)}-${formatClock(receipt.endTime)}</div>${playerTypeNote}`
+      : receipt.customerName
+      ? `<div class="receipt-center receipt-meta">Cliente: ${escapeHtml(receipt.customerName)}</div>`
+      : '<div class="receipt-center receipt-meta">Consumo en barra</div>';
 
   let payment = '';
   if (receipt.paymentMethod === 'efectivo') {
-    payment += receiptRow('Efectivo', money(receipt.totalAmount));
     if (receipt.received) {
       payment += receiptRow('Recibido', money(receipt.received));
       payment += receiptRow('Vuelto', money(receipt.change || 0));
     }
-  } else if (receipt.paymentMethod === 'qr') {
-    payment += receiptRow('QR', money(receipt.qrAmount || receipt.totalAmount));
-  } else {
+  } else if (receipt.paymentMethod === 'mixto') {
     payment += receiptRow('Efectivo', money(receipt.cashAmount));
     payment += receiptRow('QR', money(receipt.qrAmount));
   }
@@ -259,16 +317,20 @@ export function receiptBodyHtml(receipt: ReceiptData) {
     payment += `<div class="receipt-small">Ref. QR: ${escapeHtml(receipt.qrReference)}</div>`;
   }
 
+  const promotions = String(receipt.promotions || '').trim();
+  const promotionsHtml = promotions
+    ? `<div class="receipt-rule"></div><div class="receipt-note receipt-center">${escapeHtml(promotions).replace(/\n/g, '<br />')}</div>`
+    : '';
+
   return `<div class="receipt-paper">
     <div class="receipt-header">
       <div class="receipt-business">${escapeHtml(receipt.businessName)}</div>
       <div class="receipt-sub">Comprobante de caja</div>
+      ${receipt.reprint ? '<div class="receipt-reprint">Reimpresión</div>' : ''}
     </div>
     <div class="receipt-rule"></div>
-    ${receiptRow('Comprobante', receipt.number)}
+    ${receiptRow('Nro', receipt.number)}
     ${receiptRow('Fecha', formatDateTime(receipt.createdAt))}
-    ${receiptRow('Turno', `#${receipt.shiftId}`)}
-    ${receiptRow('Atendió', receipt.cashier)}
     <div class="receipt-rule"></div>
     <div class="receipt-center receipt-title">${title}</div>
     ${detail}
@@ -279,7 +341,7 @@ export function receiptBodyHtml(receipt: ReceiptData) {
             <thead>
               <tr>
                 <th class="receipt-qty">Cant</th>
-                <th>Descripción</th>
+                <th>Desc.</th>
                 <th class="receipt-amount">Importe</th>
               </tr>
             </thead>
@@ -290,22 +352,21 @@ export function receiptBodyHtml(receipt: ReceiptData) {
     <div class="receipt-rule"></div>
     ${
       receipt.kind === 'table'
-        ? `${receiptRow('Billar', money(receipt.billiardAmount))}${receiptRow(
-            'Consumo',
+        ? `<div class="receipt-split"><span>Billar ${escapeHtml(
+            money(receipt.billiardAmount)
+          )}</span><span class="receipt-split-bar">|</span><span>Consumo ${escapeHtml(
             money(receipt.productsAmount)
-          )}`
+          )}</span></div>`
         : receiptRow('Productos', money(receipt.productsAmount))
     }
-    <div class="receipt-total"><span>TOTAL</span><span>${escapeHtml(
-      money(receipt.totalAmount)
-    )}</span></div>
-    <div class="receipt-rule"></div>
-    ${receiptRow('Forma de pago', paymentLabel(receipt.paymentMethod))}
+    <div class="receipt-total"><span>TOTAL</span><span class="receipt-total-value"><span class="receipt-pay-tag">${escapeHtml(
+      paymentLabel(receipt.paymentMethod)
+    )}</span><span>${escapeHtml(money(receipt.totalAmount))}</span></span></div>
     ${payment}
     ${receipt.notes ? `<div class="receipt-note">Nota: ${escapeHtml(receipt.notes)}</div>` : ''}
     <div class="receipt-rule"></div>
     <div class="receipt-thanks">¡Gracias por su visita!</div>
-    <div class="receipt-legal">Comprobante interno · No constituye factura fiscal</div>
+    ${promotionsHtml}
   </div>`;
 }
 
@@ -316,22 +377,30 @@ function receiptDocumentHtml(receipt: ReceiptData) {
   <meta charset="utf-8" />
   <title>Comprobante ${escapeHtml(receipt.number)}</title>
   <style>
-    @page { size: 80mm 297mm; margin: 0; }
-    html, body { margin: 0; padding: 0; background: #ffffff; }
+    @page { margin: 0; }
+    html {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
+    }
     body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      height: auto;
+      min-height: 0;
       box-sizing: border-box;
-      width: 80mm;
-      padding: 4mm 4mm 6mm;
+      width: 58mm;
+      padding: 1.5mm 3mm 2mm;
       color: #000000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     ${RECEIPT_CSS}
-    .receipt-paper { max-width: none; width: 72mm; color: #000000; }
-    .receipt-paper .receipt-rule { border-top-color: #000000; }
-    .receipt-paper .receipt-sub,
-    .receipt-paper .receipt-small,
-    .receipt-paper .receipt-legal { color: #000000; }
-    .receipt-paper .receipt-items th { border-bottom-color: #000000; color: #000000; }
-    .receipt-paper .receipt-total { border-top-color: #000000; }
+    .receipt-paper { max-width: none; width: 48mm; color: #000000; }
   </style>
 </head>
 <body>${receiptBodyHtml(receipt)}</body>
@@ -345,8 +414,8 @@ export function printReceipt(receipt: ReceiptData) {
   iframe.style.position = 'fixed';
   iframe.style.left = '-10000px';
   iframe.style.top = '0';
-  iframe.style.width = '80mm';
-  iframe.style.height = '600px';
+  iframe.style.width = '58mm';
+  iframe.style.height = '800px';
   iframe.style.border = '0';
   document.body.appendChild(iframe);
 
@@ -371,17 +440,43 @@ export function printReceipt(receipt: ReceiptData) {
   const trigger = () => {
     if (printed) return;
     printed = true;
-    try {
-      const contentHeight = Math.max(120, frameDocument.body.scrollHeight);
-      const pageHeightMm = Math.ceil((contentHeight * 25.4) / 96) + 4;
-      const pageStyle = frameDocument.createElement('style');
-      pageStyle.textContent = `@page { size: 80mm ${pageHeightMm}mm; margin: 0; }`;
-      frameDocument.head.appendChild(pageStyle);
-      frameWindow.focus();
-      frameWindow.print();
-    } catch {
-      cleanup();
-    }
+    void (async () => {
+      try {
+        if (frameDocument.fonts?.ready) {
+          await Promise.race([
+            frameDocument.fonts.ready,
+            new Promise<void>((resolve) => window.setTimeout(resolve, 1000)),
+          ]);
+        }
+        const paper = frameDocument.querySelector('.receipt-paper') as HTMLElement | null;
+        const paperHeightPx = paper
+          ? paper.getBoundingClientRect().height
+          : frameDocument.body.scrollHeight;
+        const bodyPaddingPx = (3.5 * 96) / 25.4; // 1.5mm arriba + 2mm abajo (igual que el CSS)
+        const contentHeightPx = Math.max(120, paperHeightPx + bodyPaddingPx);
+        const pageHeightMm = Math.ceil((contentHeightPx * 25.4) / 96 + 2);
+        const pageStyle = frameDocument.createElement('style');
+        pageStyle.textContent = `@page { size: 58mm ${pageHeightMm}mm; margin: 0; }`;
+        frameDocument.head.appendChild(pageStyle);
+        console.log('[RECEIPT-PRINT]', {
+          measuredHeightPx: contentHeightPx,
+          paperHeightPx,
+          bodyPaddingPx,
+          pageHeightMm,
+          devicePixelRatio: window.devicePixelRatio,
+          frameInnerWidth: frameWindow.innerWidth,
+          userAgent: navigator.userAgent,
+        });
+        frameWindow.requestAnimationFrame(() => {
+          frameWindow.requestAnimationFrame(() => {
+            frameWindow.focus();
+            frameWindow.print();
+          });
+        });
+      } catch {
+        cleanup();
+      }
+    })();
   };
 
   frameWindow.addEventListener('afterprint', cleanup);
@@ -390,4 +485,18 @@ export function printReceipt(receipt: ReceiptData) {
     if (!printed) trigger();
   }, 500);
   window.setTimeout(cleanup, 60_000);
+}
+
+export async function printReceiptSmart(receipt: ReceiptData, settings: Settings | null | undefined) {
+  const rawEnabled = Boolean(settings?.rawPrintingEnabled);
+  const printerName = String(settings?.thermalPrinterName || '').trim();
+  if (rawEnabled && printerName) {
+    try {
+      await api.printReceiptRaw(receipt);
+      return;
+    } catch (error) {
+      console.warn('[RECEIPT-PRINT] RAW falló, usando fallback', error);
+    }
+  }
+  printReceipt(receipt);
 }

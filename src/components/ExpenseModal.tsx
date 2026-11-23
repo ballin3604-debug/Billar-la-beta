@@ -87,7 +87,19 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
     const match = activeProducts.find(
       (product) => product.name.toLowerCase() === value.trim().toLowerCase()
     );
-    updateLine(key, { name: value, productId: match?.id ?? null });
+    setLines((current) =>
+      current.map((line) => {
+        if (line.key !== key) return line;
+        return {
+          ...line,
+          name: value,
+          productId: match?.id ?? null,
+          // Al elegir un producto del catálogo se toma su precio como costo
+          // unitario. Ese costo queda bloqueado y no se edita en la línea.
+          ...(match ? { unitPrice: String(match.price) } : {}),
+        };
+      })
+    );
   };
 
   const removeLine = (key: number) => {
@@ -125,9 +137,19 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
         if (!Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
           return setError(`La cantidad del producto #${index + 1} no es válida.`);
         }
-        const unitPrice = round2(parseDecimal(line.unitPrice));
+        const catalogProduct =
+          line.productId !== null
+            ? products.find((product) => product.id === line.productId)
+            : null;
+        const unitPrice = round2(
+          catalogProduct ? catalogProduct.price : parseDecimal(line.unitPrice)
+        );
         if (!(unitPrice > 0)) {
-          return setError(`Ingresa el costo unitario del producto #${index + 1}.`);
+          return setError(
+            catalogProduct
+              ? `El producto #${index + 1} no tiene un costo definido en el inventario.`
+              : `Ingresa el costo unitario del producto #${index + 1}.`
+          );
         }
         parsed.push({ productId: line.productId, name, quantity, unitPrice });
       }
@@ -221,7 +243,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
             <div>
               <p className="text-[11px] font-bold text-slate-200">Productos comprados (opcional)</p>
               <p className="text-[9px] text-slate-500">
-                Usa el costo de compra, no el precio de venta.
+                El costo de los productos del inventario se toma automáticamente y no se edita.
               </p>
             </div>
             <button
@@ -277,12 +299,28 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
                       }}
                     />
                     <input
-                      className="input-compact num px-1 py-1 text-right text-[11px]"
+                      className={`input-compact num px-1 py-1 text-right text-[11px] ${
+                        line.productId !== null
+                          ? 'cursor-not-allowed border-slate-700/60 bg-slate-800/40 text-slate-400'
+                          : ''
+                      }`}
                       inputMode="decimal"
-                      aria-label={`Costo unitario del producto #${index + 1}`}
+                      aria-label={
+                        line.productId !== null
+                          ? `Costo fijo del producto #${index + 1}`
+                          : `Costo unitario del producto #${index + 1}`
+                      }
                       placeholder="0"
                       value={line.unitPrice}
+                      readOnly={line.productId !== null}
+                      tabIndex={line.productId !== null ? -1 : undefined}
+                      title={
+                        line.productId !== null
+                          ? 'El costo se toma del inventario y no se puede editar.'
+                          : undefined
+                      }
                       onChange={(event) => {
+                        if (line.productId !== null) return;
                         const value = event.target.value;
                         if (/^\d*[.,]?\d{0,2}$/.test(value)) {
                           updateLine(line.key, { unitPrice: value });
@@ -338,7 +376,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
           </div>
         ) : (
           <p className="rounded-lg border border-slate-800 bg-[#08111d] px-3 py-2 text-[10px] leading-relaxed text-slate-500">
-            El monto se calcula automáticamente con la cantidad y el costo de cada producto.
+            El monto se calcula con la cantidad y el costo de cada producto. Los costos del
+            inventario no se editan.
           </p>
         )}
 

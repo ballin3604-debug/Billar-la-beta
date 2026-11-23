@@ -68,7 +68,7 @@ export const AttendanceReport: React.FC<AttendanceReportProps> = ({ entries, fil
       <div className="flex items-start justify-between gap-4 border-b-2 border-slate-800 pb-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-            {settings?.businessName || 'Billar & Bar'}
+            {settings?.businessName || 'Billar Bar la Beta'}
           </p>
           <h1 className="mt-0.5 text-lg font-black uppercase tracking-tight">
             Planilla de asistencia del personal
@@ -220,8 +220,8 @@ export const AttendanceReport: React.FC<AttendanceReportProps> = ({ entries, fil
       </div>
 
       <p className="mt-4 border-t border-slate-200 pt-1 text-center text-[8px] text-slate-400">
-        Documento generado por el sistema local · {settings?.businessName || 'Billar & Bar'} ·
-        Entrada = inicio de sesión · Salida = arqueo de caja.
+        Documento generado por el sistema local · {settings?.businessName || 'Billar Bar la Beta'} ·
+        Entrada = inicio de sesión · Salida = cierre de sesión o de caja.
       </p>
     </div>
   );

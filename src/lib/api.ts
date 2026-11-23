@@ -7,6 +7,7 @@ import type {
   ShiftDetail,
   ShiftHistoryItem,
   StaffAttendance,
+  TransferDirection,
   User,
 } from '../types';
 
@@ -134,8 +135,8 @@ export const api = {
       body: payload,
     }),
 
-  startTable: (tableId: number) =>
-    request<MutationResponse>(`/tables/${tableId}/start`, { method: 'POST', body: {} }),
+  startTable: (tableId: number, playerType: 'normal' | 'staff' | 'mixed' = 'normal') =>
+    request<MutationResponse>(`/tables/${tableId}/start`, { method: 'POST', body: { playerType } }),
 
   addItem: (tableId: number, productId: number, quantity = 1) =>
     request<MutationResponse>(`/tables/${tableId}/items`, {
@@ -146,6 +147,24 @@ export const api = {
   removeItem: (tableId: number, itemId: number) =>
     request<MutationResponse>(`/tables/${tableId}/items/${itemId}`, {
       method: 'DELETE',
+    }),
+
+  startCheckout: (tableId: number) =>
+    request<MutationResponse>(`/tables/${tableId}/checkout/start`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  cancelCheckout: (tableId: number) =>
+    request<MutationResponse>(`/tables/${tableId}/checkout/cancel`, {
+      method: 'POST',
+      body: {},
+    }),
+
+  updateTableNote: (tableId: number, note: string) =>
+    request<MutationResponse>(`/tables/${tableId}/note`, {
+      method: 'PATCH',
+      body: { note },
     }),
 
   chargeTable: (
@@ -180,6 +199,44 @@ export const api = {
   }) =>
     request<MutationResponse>('/sales', { method: 'POST', body: payload }),
 
+  openCustomerTab: (customerName: string) =>
+    request<MutationResponse>('/customer-tabs', {
+      method: 'POST',
+      body: { customerName },
+    }),
+
+  addCustomerTabItem: (tabId: number, productId: number, quantity = 1) =>
+    request<MutationResponse>(`/customer-tabs/${tabId}/items`, {
+      method: 'POST',
+      body: { productId, quantity },
+    }),
+
+  removeCustomerTabItem: (tabId: number, itemId: number) =>
+    request<MutationResponse>(`/customer-tabs/${tabId}/items/${itemId}`, {
+      method: 'DELETE',
+    }),
+
+  chargeCustomerTab: (
+    tabId: number,
+    payload: {
+      paymentMethod: string;
+      cashAmount?: number;
+      qrAmount?: number;
+      qrReference?: string;
+      notes?: string;
+    }
+  ) =>
+    request<MutationResponse>(`/customer-tabs/${tabId}/charge`, {
+      method: 'POST',
+      body: payload,
+    }),
+
+  cancelCustomerTab: (tabId: number, reason: string) =>
+    request<MutationResponse>(`/customer-tabs/${tabId}/cancel`, {
+      method: 'POST',
+      body: { reason },
+    }),
+
   addExpense: (payload: {
     amount?: number;
     concept: string;
@@ -200,6 +257,16 @@ export const api = {
 
   voidExpense: (id: number, reason: string) =>
     request<MutationResponse>(`/expenses/${id}/void`, { method: 'POST', body: { reason } }),
+
+  createTransfer: (payload: {
+    direction: TransferDirection;
+    amount: number;
+    concept: string;
+    reference?: string;
+  }) => request<MutationResponse>('/transfers', { method: 'POST', body: payload }),
+
+  voidTransfer: (id: number, reason: string) =>
+    request<MutationResponse>(`/transfers/${id}/void`, { method: 'POST', body: { reason } }),
 
   createUser: (payload: { name: string; pin: string; role: string }) =>
     request<MutationResponse>('/admin/users', { method: 'POST', body: payload }),
@@ -233,12 +300,12 @@ export const api = {
     }>
   ) => request<MutationResponse>(`/admin/products/${id}`, { method: 'PATCH', body: payload }),
 
-  createTable: (payload: { name: string; ratePerHour: number }) =>
+  createTable: (payload: { name: string; ratePerHour: number; color?: string }) =>
     request<MutationResponse>('/admin/tables', { method: 'POST', body: payload }),
 
   updateTable: (
     id: number,
-    payload: Partial<{ name: string; ratePerHour: number; active: boolean }>
+    payload: Partial<{ name: string; ratePerHour: number; color: string; active: boolean }>
   ) => request<MutationResponse>(`/admin/tables/${id}`, { method: 'PATCH', body: payload }),
 
   updateSettings: (payload: Partial<{
@@ -246,8 +313,27 @@ export const api = {
     currency: string;
     defaultRatePerHour: number;
     minimumPlayCharge: number;
+    defaultInitialCash: number;
     autoLockMinutes: number;
+    receiptPromotions: string;
+    thermalPrinterName: string;
+    rawPrintingEnabled: boolean;
   }>) => request<MutationResponse>('/admin/settings', { method: 'PATCH', body: payload }),
+
+  getPrinters: () =>
+    request<{ ok: boolean; printers: string[] }>('/print/printers'),
+
+  printTest: (printerName?: string) =>
+    request<MutationResponse>('/print/test', {
+      method: 'POST',
+      body: printerName ? { printerName } : {},
+    }),
+
+  printReceiptRaw: (receipt: import('../types').ReceiptData) =>
+    request<MutationResponse>('/print/receipt', {
+      method: 'POST',
+      body: receipt,
+    }),
 
   audit: (limit = 200, userId?: number, shiftId?: number) => {
     const params = new URLSearchParams({ limit: String(limit) });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, ShoppingCart } from 'lucide-react';
+import { Minus, Plus, ShoppingCart } from 'lucide-react';
 import type { Product } from '../types';
 import { useApp } from '../context/AppContext';
 import { formatMoney, plural, sumItems } from '../lib/format';
@@ -47,8 +47,21 @@ export const BarSaleModal: React.FC<BarSaleModalProps> = ({ open, onClose }) => 
   const add = (product: Product) => {
     setCart((previous) => {
       const current = previous[product.id] || 0;
+      if (current >= 99) return previous;
       if (product.stock !== null && current >= Number(product.stock)) return previous;
       return { ...previous, [product.id]: current + 1 };
+    });
+  };
+
+  const remove = (productId: number) => {
+    setCart((previous) => {
+      const current = previous[productId] || 0;
+      if (current <= 1) {
+        const next = { ...previous };
+        delete next[productId];
+        return next;
+      }
+      return { ...previous, [productId]: current - 1 };
     });
   };
 
@@ -150,6 +163,14 @@ export const BarSaleModal: React.FC<BarSaleModalProps> = ({ open, onClose }) => 
                     </div>
                     <div className="mt-1.5 flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 text-slate-400 transition hover:border-rose-500/50 hover:text-rose-300"
+                          onClick={() => remove(Number(item.productId))}
+                          aria-label={`Quitar uno de ${item.name}`}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </button>
                         <span className="num w-6 text-center text-xs font-bold text-white">
                           {item.quantity}
                         </span>

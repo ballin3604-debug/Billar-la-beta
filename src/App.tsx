@@ -10,6 +10,7 @@ import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { CashierExpensesView } from './components/CashierExpensesView';
 import { CashierCloseView } from './components/CashierCloseView';
+import { CashierSalesView } from './components/CashierSalesView';
 import { OpenShiftScreen } from './components/OpenShiftScreen';
 import { ShiftClosedDialog } from './components/ShiftClosedDialog';
 import { ChangePinModal } from './components/ChangePinModal';
@@ -55,9 +56,7 @@ const ShiftFooter: React.FC = () => {
           <span className="truncate">
             {currentShift
               ? `Caja abierta · Turno #${currentShift.id} · ${formatClock(currentShift.openedAt)}`
-              : isAdmin
-              ? 'Caja cerrada · Abre un turno para operar'
-              : 'Caja cerrada · El administrador debe abrirla'}
+              : 'Caja cerrada · Abre un turno para operar'}
           </span>
           <span
             className="hidden shrink-0 items-center gap-1.5 text-slate-600 sm:flex"
@@ -109,14 +108,14 @@ const AppShell: React.FC = () => {
   const isAdmin = user?.role === 'admin';
   const allowedTabs: Tab[] = isAdmin
     ? ['mesas', 'caja', 'historial', 'ajustes']
-    : ['mesas', 'egresos', 'cierre'];
+    : ['mesas', 'ventas', 'egresos', 'cierre'];
   const activeTab = allowedTabs.includes(tab) ? tab : 'mesas';
 
   useEffect(() => {
     if (!user) return;
     const allowed = user.role === 'admin'
       ? ['mesas', 'caja', 'historial', 'ajustes']
-      : ['mesas', 'egresos', 'cierre'];
+      : ['mesas', 'ventas', 'egresos', 'cierre'];
     if (!allowed.includes(tab)) setTab('mesas');
   }, [setTab, tab, user]);
 
@@ -133,6 +132,8 @@ const AppShell: React.FC = () => {
           ) : (
             <OpenShiftScreen />
           )
+        ) : activeTab === 'ventas' ? (
+          currentShift ? <CashierSalesView /> : <OpenShiftScreen />
         ) : activeTab === 'egresos' ? (
           currentShift ? <CashierExpensesView /> : <OpenShiftScreen />
         ) : activeTab === 'cierre' ? (

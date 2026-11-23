@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
   CheckCircle2,
   Clock3,
   DatabaseBackup,
@@ -22,6 +23,7 @@ import {
   Star,
   Store,
   TableProperties,
+  Tag,
   Users,
   UserRoundPlus,
 } from 'lucide-react';
@@ -31,8 +33,10 @@ import type {
   Product,
   ProductCategory,
   Role,
+  Settings,
   StaffAttendance,
   Table,
+  TableColor,
   User,
 } from '../types';
 import { useApp } from '../context/AppContext';
@@ -52,6 +56,7 @@ import {
   roleLabel,
   todayInputDate,
 } from '../lib/format';
+import { TABLE_COLORS, suggestTableColor, tableColorStyle } from '../lib/tableColors';
 import { Modal } from './ui/Modal';
 import { EmptyState } from './ui/EmptyState';
 import { ChangePinModal } from './ChangePinModal';
@@ -70,6 +75,107 @@ const SECTIONS: Array<{ id: Section; label: string; icon: React.ReactNode; hint:
 ];
 
 const PRODUCT_CATEGORIES: ProductCategory[] = ['cervezas', 'bebidas', 'snacks', 'multas', 'otros'];
+
+interface BusinessForm {
+  businessName: string;
+  currency: string;
+  defaultRatePerHour: string;
+  minimumPlayCharge: string;
+  defaultInitialCash: string;
+  autoLockMinutes: string;
+  receiptPromotions: string;
+  thermalPrinterName: string;
+  rawPrintingEnabled: boolean;
+}
+
+const EMPTY_BUSINESS_FORM: BusinessForm = {
+  businessName: '',
+  currency: 'Bs',
+  defaultRatePerHour: '0',
+  minimumPlayCharge: '0',
+  defaultInitialCash: '200',
+  autoLockMinutes: '15',
+  receiptPromotions: '',
+  thermalPrinterName: '',
+  rawPrintingEnabled: false,
+};
+
+function businessFormFromSettings(settings: Settings): BusinessForm {
+  return {
+    businessName: settings.businessName,
+    currency: settings.currency,
+    defaultRatePerHour: String(settings.defaultRatePerHour),
+    minimumPlayCharge: String(settings.minimumPlayCharge),
+    defaultInitialCash: String(settings.defaultInitialCash),
+    autoLockMinutes: String(settings.autoLockMinutes),
+    receiptPromotions: String(settings.receiptPromotions || ''),
+    thermalPrinterName: String(settings.thermalPrinterName || ''),
+    rawPrintingEnabled: Boolean(settings.rawPrintingEnabled),
+  };
+}
+
+interface AuditPriceChange {
+  title: string;
+  changes: Array<{ label: string; previous: number; current: number; unit?: string }>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asNumber(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function getAuditPriceChange(entry: AuditEntry): AuditPriceChange | null {
+  const details = entry.details;
+  if (!details) return null;
+
+  const kind = typeof details.kind === 'string' ? details.kind : entry.entityType;
+  const before = asRecord(details.before);
+  const after = asRecord(details.after);
+  if (!before || !after) return null;
+
+  if (kind === 'product') {
+    const previous = asNumber(before.price);
+    const current = asNumber(after.price);
+    if (previous === null || current === null || previous === current) return null;
+    return {
+      title: String(after.name ?? before.name ?? 'Producto'),
+      changes: [{ label: 'Precio', previous, current }],
+    };
+  }
+
+  if (kind === 'table') {
+    const previous = asNumber(before.ratePerHour);
+    const current = asNumber(after.ratePerHour);
+    if (previous === null || current === null || previous === current) return null;
+    return {
+      title: String(after.name ?? before.name ?? 'Mesa'),
+      changes: [{ label: 'Tarifa', previous, current, unit: '/h' }],
+    };
+  }
+
+  if (kind === 'settings') {
+    const changes: AuditPriceChange['changes'] = [];
+    const previousRate = asNumber(before.defaultRatePerHour);
+    const currentRate = asNumber(after.defaultRatePerHour);
+    if (previousRate !== null && currentRate !== null && previousRate !== currentRate) {
+      changes.push({ label: 'Tarifa base', previous: previousRate, current: currentRate, unit: '/h' });
+    }
+    const previousMinimum = asNumber(before.minimumPlayCharge);
+    const currentMinimum = asNumber(after.minimumPlayCharge);
+    if (previousMinimum !== null && currentMinimum !== null && previousMinimum !== currentMinimum) {
+      changes.push({ label: 'Cobro mínimo', previous: previousMinimum, current: currentMinimum });
+    }
+    return changes.length ? { title: 'Ajustes', changes } : null;
+  }
+
+  return null;
+}
 
 export const SettingsView: React.FC = () => {
   const {
@@ -96,15 +202,24 @@ export const SettingsView: React.FC = () => {
   >(null);
   const [resetUser, setResetUser] = useState<User | null>(null);
 
-  const [businessForm, setBusinessForm] = useState({
-    businessName: '',
-    currency: 'Bs',
-    defaultRatePerHour: '0',
-    minimumPlayCharge: '0',
-    autoLockMinutes: '15',
-  });
+  const [businessForm, setBusinessFormState] = useState<BusinessForm>(EMPTY_BUSINESS_FORM);
+  const businessFormDirty = useRef(false);
+  // Marca el formulario como editado para que el refresco automático cada 30 s
+  // no borre los cambios que el usuario todavía no guardó.
+  const setBusinessForm = useCallback((update: React.SetStateAction<BusinessForm>) => {
+    businessFormDirty.current = true;
+    setBusinessFormState(update);
+  }, []);
   const [savingBusiness, setSavingBusiness] = useState(false);
   const [businessError, setBusinessError] = useState<string | null>(null);
+  const [printers, setPrinters] = useState<string[]>([]);
+  const [printersLoading, setPrintersLoading] = useState(false);
+  const [printersError, setPrintersError] = useState<string | null>(null);
+  const [printerTestBusy, setPrinterTestBusy] = useState(false);
+  const [printerTestResult, setPrinterTestResult] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const [productSearch, setProductSearch] = useState('');
   const [productCategory, setProductCategory] = useState<'todas' | ProductCategory>('todas');
@@ -120,6 +235,7 @@ export const SettingsView: React.FC = () => {
   const [auditQuery, setAuditQuery] = useState('');
   const [auditUser, setAuditUser] = useState('');
   const [auditSensitiveOnly, setAuditSensitiveOnly] = useState(false);
+  const [auditPriceOnly, setAuditPriceOnly] = useState(false);
 
   const [attendance, setAttendance] = useState<StaffAttendance[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -129,14 +245,8 @@ export const SettingsView: React.FC = () => {
   const [attendanceReportOpen, setAttendanceReportOpen] = useState(false);
 
   useEffect(() => {
-    if (!settings) return;
-    setBusinessForm({
-      businessName: settings.businessName,
-      currency: settings.currency,
-      defaultRatePerHour: String(settings.defaultRatePerHour),
-      minimumPlayCharge: String(settings.minimumPlayCharge),
-      autoLockMinutes: String(settings.autoLockMinutes),
-    });
+    if (!settings || businessFormDirty.current) return;
+    setBusinessFormState(businessFormFromSettings(settings));
   }, [settings]);
 
   const loadBackups = useCallback(async () => {
@@ -180,11 +290,26 @@ export const SettingsView: React.FC = () => {
     }
   }, []);
 
+  const loadPrinters = useCallback(async () => {
+    setPrintersLoading(true);
+    setPrintersError(null);
+    try {
+      const response = await api.getPrinters();
+      setPrinters(Array.isArray(response.printers) ? response.printers : []);
+    } catch (err) {
+      setPrintersError(err instanceof Error ? err.message : 'No se pudieron cargar las impresoras.');
+      setPrinters([]);
+    } finally {
+      setPrintersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (section === 'respaldos') loadBackups();
     if (section === 'auditoria') loadAudit();
     if (section === 'personal') loadAttendance();
-  }, [section, loadBackups, loadAudit, loadAttendance]);
+    if (section === 'negocio') void loadPrinters();
+  }, [section, loadBackups, loadAudit, loadAttendance, loadPrinters]);
 
   const currency = settings?.currency || 'Bs';
 
@@ -194,6 +319,7 @@ export const SettingsView: React.FC = () => {
     setBusinessError(null);
     const rate = Number(businessForm.defaultRatePerHour.replace(',', '.'));
     const minimum = Number(businessForm.minimumPlayCharge.replace(',', '.'));
+    const initialCash = Number(businessForm.defaultInitialCash.replace(',', '.'));
     const autoLock = Number(businessForm.autoLockMinutes);
     if (businessForm.businessName.trim().length < 2) {
       return setBusinessError('El nombre del negocio es obligatorio.');
@@ -204,23 +330,63 @@ export const SettingsView: React.FC = () => {
     if (!Number.isFinite(minimum) || minimum < 0) {
       return setBusinessError('El cobro mínimo no es válido.');
     }
+    if (!Number.isFinite(initialCash) || initialCash < 0) {
+      return setBusinessError('La caja inicial no es válida.');
+    }
     if (!Number.isFinite(autoLock) || autoLock < 0 || autoLock > 240) {
       return setBusinessError('El bloqueo automático debe estar entre 0 y 240 minutos.');
+    }
+    const printerName = businessForm.thermalPrinterName.trim();
+    if (/[\x00-\x1F\x7F]/.test(printerName)) {
+      return setBusinessError('El nombre de la impresora contiene caracteres no válidos.');
+    }
+    if (businessForm.rawPrintingEnabled && !printerName) {
+      return setBusinessError('Selecciona o escribe una impresora para activar la impresión directa (RAW).');
     }
 
     setSavingBusiness(true);
     try {
-      await runAction(() =>
+      const response = await runAction(() =>
         api.updateSettings({
           businessName: businessForm.businessName.trim(),
           currency: businessForm.currency.trim() || 'Bs',
           defaultRatePerHour: rate,
           minimumPlayCharge: minimum,
+          defaultInitialCash: initialCash,
           autoLockMinutes: autoLock,
+          receiptPromotions: businessForm.receiptPromotions.trim(),
+          thermalPrinterName: printerName,
+          rawPrintingEnabled: businessForm.rawPrintingEnabled,
         })
       );
+      if (response?.state?.settings) {
+        businessFormDirty.current = false;
+        setBusinessFormState(businessFormFromSettings(response.state.settings));
+      }
     } finally {
       setSavingBusiness(false);
+    }
+  };
+
+  const testPrinter = async () => {
+    if (printerTestBusy) return;
+    setPrinterTestResult(null);
+    const name = businessForm.thermalPrinterName.trim();
+    if (!name) {
+      setPrinterTestResult({ type: 'error', message: 'Selecciona o escribe una impresora para probar.' });
+      return;
+    }
+    setPrinterTestBusy(true);
+    try {
+      await api.printTest(name);
+      setPrinterTestResult({ type: 'success', message: 'Ticket de prueba enviado a la impresora.' });
+    } catch (err) {
+      setPrinterTestResult({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'No se pudo imprimir el ticket de prueba.',
+      });
+    } finally {
+      setPrinterTestBusy(false);
     }
   };
 
@@ -279,9 +445,11 @@ export const SettingsView: React.FC = () => {
     const term = auditQuery.trim().toLowerCase();
     return auditEntries.filter((entry) => {
       if (auditUser && entry.userName !== auditUser) return false;
+      const priceChange = getAuditPriceChange(entry);
+      if (auditPriceOnly && !priceChange) return false;
       if (auditSensitiveOnly) {
         const sensitive = ['void', 'cancel', 'login_failed', 'shift_close', 'expense'];
-        if (!sensitive.some((token) => entry.action.includes(token))) return false;
+        if (!priceChange && !sensitive.some((token) => entry.action.includes(token))) return false;
       }
       if (!term) return true;
       const details = entry.details ? JSON.stringify(entry.details) : '';
@@ -292,7 +460,7 @@ export const SettingsView: React.FC = () => {
         details.toLowerCase().includes(term)
       );
     });
-  }, [auditEntries, auditQuery, auditSensitiveOnly, auditUser]);
+  }, [auditEntries, auditPriceOnly, auditQuery, auditSensitiveOnly, auditUser]);
 
   const filteredAttendance = useMemo(() => {
     const term = attendanceQuery.trim().toLowerCase();
@@ -434,7 +602,7 @@ export const SettingsView: React.FC = () => {
                     </div>
                     <div>
                       <label className="label" htmlFor="minimum-charge">
-                        Cobro mínimo de una partida ({currency})
+                        Cobro mínimo de una partida ({currency}, 0 = sin mínimo)
                       </label>
                       <input
                         id="minimum-charge"
@@ -448,7 +616,35 @@ export const SettingsView: React.FC = () => {
                           }))
                         }
                       />
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                        El billar se cobra en pasos de 0,50 Bs desde el primer minuto.
+                      </p>
                     </div>
+                    <div>
+                      <label className="label" htmlFor="default-initial-cash">
+                        Fondo inicial fijo ({currency})
+                      </label>
+                      <input
+                        id="default-initial-cash"
+                        className="input num"
+                        inputMode="decimal"
+                        value={businessForm.defaultInitialCash}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (/^\d*[.,]?\d{0,2}$/.test(value)) {
+                            setBusinessForm((previous) => ({
+                              ...previous,
+                              defaultInitialCash: value,
+                            }));
+                          }
+                        }}
+                      />
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                        Monto con el que se abrirá la caja. Es el mismo para todos los usuarios y
+                        solo se cambia desde aquí.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="label" htmlFor="auto-lock">
                         Bloqueo automático por inactividad (minutos)
@@ -472,6 +668,29 @@ export const SettingsView: React.FC = () => {
                     </div>
                   </div>
 
+                  <div>
+                    <label className="label" htmlFor="receipt-promotions">
+                      Promociones al final de la hoja de impresión <span className="font-normal text-slate-600">(opcional)</span>
+                    </label>
+                    <textarea
+                      id="receipt-promotions"
+                      className="input min-h-24"
+                      maxLength={600}
+                      placeholder={'Ejemplo:\nMartes 2x1 en cervezas\nPromo nachos + bebida 25 Bs'}
+                      value={businessForm.receiptPromotions}
+                      onChange={(event) =>
+                        setBusinessForm((previous) => ({
+                          ...previous,
+                          receiptPromotions: event.target.value,
+                        }))
+                      }
+                    />
+                    <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                      Este texto se imprime al final de los comprobantes y de la planilla del turno.
+                      Puedes usar varias líneas.
+                    </p>
+                  </div>
+
                   {businessError ? (
                     <div className="rounded-lg border border-rose-800/60 bg-rose-950/40 px-3 py-2 text-xs font-medium text-rose-300">
                       {businessError}
@@ -484,6 +703,127 @@ export const SettingsView: React.FC = () => {
                     </button>
                   </div>
                 </form>
+              </div>
+
+              <div className="panel overflow-hidden">
+                <div className="panel-head">
+                  <div>
+                    <h3 className="text-xs font-bold text-white">Impresora térmica</h3>
+                    <p className="text-[10px] text-slate-500">
+                      Impresión directa RAW (ESC/POS) para tickets de 58 mm, con respaldo al método actual.
+                    </p>
+                  </div>
+                  <Printer className="h-4 w-4 text-slate-500" />
+                </div>
+                <div className="space-y-4 px-4 py-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="label" htmlFor="thermal-printer-name">
+                        Impresora
+                      </label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          id="thermal-printer-name"
+                          className="input flex-1"
+                          list="thermal-printers-list"
+                          maxLength={120}
+                          placeholder="Nombre exacto de la impresora en Windows"
+                          value={businessForm.thermalPrinterName}
+                          onChange={(event) => {
+                            setPrinterTestResult(null);
+                            setBusinessForm((previous) => ({
+                              ...previous,
+                              thermalPrinterName: event.target.value,
+                            }));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-secondary shrink-0"
+                          onClick={() => void loadPrinters()}
+                          disabled={printersLoading}
+                        >
+                          {printersLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                          {printersLoading ? 'Cargando…' : 'Actualizar lista'}
+                        </button>
+                      </div>
+                      <datalist id="thermal-printers-list">
+                        {printers.map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                      <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                        Puedes elegir una impresora detectada o escribir el nombre manualmente. Guarda los cambios para usarla en la impresión directa.
+                      </p>
+                      {printersError ? (
+                        <p className="mt-1 text-[10px] text-rose-300">{printersError}</p>
+                      ) : null}
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-800 bg-[#08111d] px-3 py-3">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-[#070d16] accent-emerald-500"
+                          checked={businessForm.rawPrintingEnabled}
+                          onChange={(event) => {
+                            setPrinterTestResult(null);
+                            setBusinessForm((previous) => ({
+                              ...previous,
+                              rawPrintingEnabled: event.target.checked,
+                            }));
+                          }}
+                        />
+                        <span>
+                          <span className="block text-xs font-bold text-slate-200">Impresión directa (RAW)</span>
+                          <span className="mt-0.5 block text-[10px] leading-relaxed text-slate-500">
+                            Envía el ticket ESC/POS al spooler de Windows desde el servidor. Si falla, se usa la impresión actual por el navegador.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-800/80 pt-3">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => void testPrinter()}
+                      disabled={printerTestBusy}
+                    >
+                      {printerTestBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4" />
+                      )}
+                      {printerTestBusy ? 'Probando…' : 'Probar impresión'}
+                    </button>
+                    <span className="text-[10px] text-slate-500">
+                      La prueba se envía a la impresora escrita arriba (no es necesario guardar antes).
+                    </span>
+                  </div>
+
+                  {printerTestResult ? (
+                    <div
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-xs font-medium',
+                        printerTestResult.type === 'success'
+                          ? 'border-emerald-800/60 bg-emerald-950/40 text-emerald-300'
+                          : 'border-rose-800/60 bg-rose-950/40 text-rose-300'
+                      )}
+                    >
+                      {printerTestResult.message}
+                    </div>
+                  ) : null}
+
+                  <p className="text-[10px] leading-relaxed text-slate-500">
+                    Nota: el nombre debe coincidir con la impresora instalada en Windows. Guarda los cambios en “Datos del negocio” para aplicar la configuración.
+                  </p>
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -549,23 +889,30 @@ export const SettingsView: React.FC = () => {
                   {tables.map((table) => (
                     <div
                       key={table.id}
+                      style={tableColorStyle(table.color)}
                       className={cn(
-                        'rounded-xl border p-3.5 transition',
+                        'relative overflow-hidden rounded-xl border p-3.5 transition',
                         table.active
                           ? 'border-slate-800 bg-[#08111d]'
                           : 'border-slate-800/60 bg-[#070d16] opacity-60'
                       )}
                     >
+                      <span className="table-accent absolute inset-x-0 top-0 h-0.5" />
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                            Mesa {table.number}
-                          </p>
-                          <p className="text-sm font-bold text-slate-100">{table.name}</p>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="table-badge flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black">
+                            {table.number}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                              Mesa {table.number}
+                            </p>
+                            <p className="truncate text-sm font-bold text-slate-100">{table.name}</p>
+                          </div>
                         </div>
                         <span
                           className={cn(
-                            'rounded-md border px-1.5 py-0.5 text-[9px] font-bold',
+                            'shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-bold',
                             !table.active
                               ? 'border-slate-700 bg-slate-800/60 text-slate-500'
                               : table.status === 'occupied'
@@ -596,8 +943,9 @@ export const SettingsView: React.FC = () => {
               )}
 
               <div className="border-t border-slate-800/80 bg-[#08111d] px-4 py-2.5 text-[10px] leading-relaxed text-slate-500">
-                Desactivar una mesa evita que se inicie, pero conserva su historial. No se puede
-                desactivar una mesa ocupada.
+                Cada mesa tiene un color distinto para que el cajero la identifique al cobrar. Las
+                mesas nuevas reciben el primer color libre. Desactivar una mesa evita que se inicie,
+                pero conserva su historial; no se puede desactivar una mesa ocupada.
               </div>
             </div>
           ) : null}
@@ -877,7 +1225,7 @@ export const SettingsView: React.FC = () => {
                   <div>
                     <h3 className="text-xs font-bold text-white">Entradas y salidas del personal</h3>
                     <p className="text-[10px] text-slate-500">
-                      La entrada se registra al iniciar sesión; la salida, al cerrar caja.
+                      La entrada se registra al iniciar sesión; la salida, al cerrar sesión o caja.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1023,16 +1371,17 @@ export const SettingsView: React.FC = () => {
                     {plural(filteredAttendance.length, 'registro', 'registros')}{' '}
                     {filteredAttendance.length === 1 ? 'visible' : 'visibles'} de {attendance.length}
                   </span>
-                  <span>Entrada = inicio de sesión · Salida = arqueo de caja</span>
+                  <span>Entrada = inicio de sesión · Salida = cierre de sesión o de caja</span>
                 </div>
               </div>
 
               <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
                 <p className="font-bold text-sky-300">Registro automático</p>
                 <p className="mt-1">
-                  Cada ingreso con PIN abre una jornada con su hora de entrada. Al confirmar el
-                  arqueo y cerrar la caja, se guarda la hora de salida del usuario que cierra. Si
-                  alguien no cierra caja, su jornada queda marcada como “Sin salida”.
+                  Cada ingreso con PIN abre una jornada con su hora de entrada. La salida se guarda
+                  al cerrar sesión o al confirmar el arqueo y cerrar la caja. Si alguien olvida
+                  cerrar sesión, la jornada anterior se cierra automáticamente al final de su día
+                  para no acumular entradas abiertas.
                 </p>
               </div>
             </div>
@@ -1226,6 +1575,14 @@ export const SettingsView: React.FC = () => {
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Solo sensibles
                 </button>
+                <button
+                  type="button"
+                  className={cn('chip text-[10px]', auditPriceOnly && 'chip-active')}
+                  onClick={() => setAuditPriceOnly((previous) => !previous)}
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  Precios
+                </button>
               </div>
 
               {auditError ? (
@@ -1267,7 +1624,20 @@ export const SettingsView: React.FC = () => {
                     </thead>
                     <tbody>
                       {filteredAudit.map((entry) => {
+                        const priceChange = getAuditPriceChange(entry);
+                        const priceSummary = priceChange
+                          ? `${priceChange.title}: ${priceChange.changes
+                              .map(
+                                (change) =>
+                                  `${change.label} ${formatMoney(change.previous, currency)}${
+                                    change.unit ?? ''
+                                  } → ${formatMoney(change.current, currency)}${change.unit ?? ''}`
+                              )
+                              .join(' · ')}`
+                          : null;
                         const sensitive =
+                          Boolean(priceChange) ||
+                          entry.action === 'price_change' ||
                           entry.action.includes('void') ||
                           entry.action.includes('cancel') ||
                           entry.action.includes('login_failed') ||
@@ -1287,14 +1657,30 @@ export const SettingsView: React.FC = () => {
                                     : 'border-slate-700 bg-slate-800/40 text-slate-400'
                                 )}
                               >
-                                {actionLabel(entry.action)}
+                                {priceChange ? 'Cambio de precios' : actionLabel(entry.action)}
                               </span>
                             </td>
                             <td className="num text-[10px] text-slate-500">
                               {entry.shiftId ? `#${entry.shiftId}` : '—'}
                             </td>
                             <td className="max-w-[360px]">
-                              {entry.details ? (
+                              {priceSummary ? (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-medium text-amber-200/90">
+                                    {priceSummary}
+                                  </p>
+                                  {entry.details ? (
+                                    <details>
+                                      <summary className="cursor-pointer text-[9px] text-slate-500 hover:text-slate-300">
+                                        Ver datos
+                                      </summary>
+                                      <pre className="scroll-thin mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded-md bg-[#070d16] p-2 text-[9px] leading-relaxed text-slate-400">
+                                        {JSON.stringify(entry.details, null, 2)}
+                                      </pre>
+                                    </details>
+                                  ) : null}
+                                </div>
+                              ) : entry.details ? (
                                 <details>
                                   <summary className="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300">
                                     Ver detalle
@@ -1330,6 +1716,7 @@ export const SettingsView: React.FC = () => {
         table={tableModal?.mode === 'edit' ? tableModal.table : null}
         currency={currency}
         defaultRate={settings?.defaultRatePerHour || 0}
+        defaultColor={suggestTableColor(tables)}
         onClose={() => setTableModal(null)}
       />
       <ProductFormModal
@@ -1369,6 +1756,7 @@ interface TableFormModalProps {
   table: Table | null;
   currency: string;
   defaultRate: number;
+  defaultColor: TableColor;
   onClose: () => void;
 }
 
@@ -1377,11 +1765,13 @@ const TableFormModal: React.FC<TableFormModalProps> = ({
   table,
   currency,
   defaultRate,
+  defaultColor,
   onClose,
 }) => {
   const { runAction } = useApp();
   const [name, setName] = useState('');
   const [rate, setRate] = useState('0');
+  const [color, setColor] = useState<TableColor>('blue');
   const [active, setActive] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1390,11 +1780,12 @@ const TableFormModal: React.FC<TableFormModalProps> = ({
     if (open) {
       setName(table?.name || '');
       setRate(String(table?.ratePerHour ?? defaultRate));
+      setColor(table?.color ?? defaultColor);
       setActive(table?.active ?? true);
       setBusy(false);
       setError(null);
     }
-  }, [defaultRate, open, table]);
+  }, [defaultColor, defaultRate, open, table]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1410,10 +1801,10 @@ const TableFormModal: React.FC<TableFormModalProps> = ({
     try {
       const response = table
         ? await runAction(() =>
-            api.updateTable(table.id, { name: name.trim(), ratePerHour: numericRate, active })
+            api.updateTable(table.id, { name: name.trim(), ratePerHour: numericRate, color, active })
           )
         : await runAction(() =>
-            api.createTable({ name: name.trim(), ratePerHour: numericRate })
+            api.createTable({ name: name.trim(), ratePerHour: numericRate, color })
           );
       if (response) onClose();
     } finally {
@@ -1470,6 +1861,37 @@ const TableFormModal: React.FC<TableFormModalProps> = ({
               if (/^\d*[.,]?\d{0,2}$/.test(value)) setRate(value);
             }}
           />
+        </div>
+        <div>
+          <span className="label">Color de identificación</span>
+          <div className="grid grid-cols-10 gap-1.5">
+            {TABLE_COLORS.map((option) => {
+              const selected = color === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  title={option.label}
+                  aria-label={`Color ${option.label}`}
+                  aria-pressed={selected}
+                  onClick={() => setColor(option.key)}
+                  className={cn(
+                    'flex h-7 items-center justify-center rounded-md border transition',
+                    selected
+                      ? 'scale-110 border-white ring-2 ring-white/30'
+                      : 'border-transparent opacity-80 hover:opacity-100'
+                  )}
+                  style={{ backgroundColor: option.hex }}
+                >
+                  {selected ? <Check className="h-3.5 w-3.5 text-white drop-shadow" /> : null}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[10px] text-slate-500">
+            {TABLE_COLORS.find((option) => option.key === color)?.label}. Este color se muestra en
+            la mesa y en el cobro para identificarla sin confusiones.
+          </p>
         </div>
         {table ? (
           <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#08111d] px-3 py-2.5 text-xs text-slate-300">
