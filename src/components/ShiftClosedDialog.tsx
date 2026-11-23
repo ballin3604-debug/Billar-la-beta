@@ -172,99 +172,25 @@ export const ShiftClosedDialog: React.FC<ShiftClosedDialogProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          <div className="kpi">
-            <p className="label mb-1">Total V.P. + T.B. + C.</p>
-            <p className="num text-base font-bold text-white">
-              {formatMoney(
-                shift.totals.totalWithChange ??
-                  Number(shift.initialCash || 0) + Number(shift.totals.grossTotal || 0),
-                currency
-              )}
-            </p>
-          </div>
-          <div className="kpi">
-            <p className="label mb-1">Total Efectivo esperado</p>
-            <p className="num text-base font-bold text-sky-300">
-              {isAdmin && expected !== null ? formatMoney(expected, currency) : '—'}
-            </p>
-          </div>
-          <div className="kpi">
-            <p className="label mb-1">Total de Efectivo en Caja</p>
-            <p className="num text-base font-bold text-emerald-300">
-              {isAdmin && counted !== null ? formatMoney(counted, currency) : 'Registrado'}
-            </p>
-          </div>
-          <div className="kpi">
-            <p className="label mb-1">Saldo en contra (−) o a favor (+)</p>
-            <p
-              className={`num text-base font-bold ${
-                balanced ? 'text-emerald-300' : difference > 0 ? 'text-amber-300' : 'text-rose-300'
-              }`}
-            >
-              {isAdmin
-                ? `${difference > 0 ? '+' : ''}${formatMoney(difference, currency)}`
-                : 'Registrada'}
-            </p>
-          </div>
-        </div>
-
         <div className="rounded-xl border border-slate-800 bg-[#08111d] p-4">
-          <div className="grid gap-3 text-xs sm:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Apertura</span>
-                <span className="text-right text-slate-300">
-                  {formatDateTime(shift.openedAt)} · {shift.openedByName}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Cierre</span>
-                <span className="text-right text-slate-300">
-                  {formatDateTime(shift.closedAt)} · {shift.closedByName}
-                </span>
-              </div>
-              {attendanceToday ? (
-                <div className="flex justify-between gap-3">
-                  <span className="flex items-center gap-1.5 text-slate-500">
-                    <LogIn className="h-3 w-3" />
-                    Entrada / salida
-                  </span>
-                  <span className="num text-emerald-300">
-                    {formatClock(attendanceToday.checkInAt)} →{' '}
-                    {attendanceToday.checkOutAt
-                      ? formatClock(attendanceToday.checkOutAt)
-                      : formatClock(shift.closedAt)}
-                  </span>
-                </div>
-              ) : null}
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Cambio</span>
-                <span className="num text-slate-300">{formatMoney(shift.initialCash, currency)}</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Tiempo Billar</span>
-                <span className="num text-slate-300">
-                  {formatMoney(shift.totals.totalBilliard, currency)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Venta de Productos</span>
-                <span className="num text-slate-300">
-                  {formatMoney(shift.totals.totalProducts, currency)}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Gastos de Caja</span>
-                <span className="num text-rose-300">
-                  {formatMoney(shift.totals.totalExpenses, currency)}
-                </span>
-              </div>
-            </div>
+          <div className="mb-3 grid gap-2 text-[11px] text-slate-400 sm:grid-cols-2">
+            <div>Apertura: <span className="text-slate-300">{formatDateTime(shift.openedAt)} · {shift.openedByName}</span></div>
+            <div>Cierre: <span className="text-slate-300">{formatDateTime(shift.closedAt)} · {shift.closedByName}</span></div>
           </div>
-
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex justify-between gap-3"><span className="text-slate-400">V. Productos</span><span className="num font-semibold text-slate-200">{formatMoney(shift.totals.totalProducts, currency)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-slate-400">Tiempo Billar</span><span className="num font-semibold text-slate-200">{formatMoney(shift.totals.totalBilliard, currency)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-slate-400">Cambio</span><span className="num font-semibold text-slate-200">{formatMoney(shift.initialCash, currency)}</span></div>
+            <div className="flex justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold"><span className="text-slate-200">Total V.P. + T.B. + C.</span><span className="num text-emerald-300">{formatMoney(shift.totals.totalWithChange ?? (Number(shift.initialCash || 0) + Number(shift.totals.grossTotal || 0)), currency)}</span></div>
+            {Number(shift.totals.pendingTotal || 0) > 0 ? <div className="flex justify-between gap-3 text-[10px] text-amber-300/90"><span>Consumo por cobrar (aún no entra a caja)</span><span className="num">−{formatMoney(shift.totals.pendingTotal || 0, currency)}</span></div> : null}
+            <div className="flex justify-between gap-3"><span className="text-slate-400">QR</span><span className="num font-semibold text-sky-300">−{formatMoney(shift.totals.totalQr, currency)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-slate-400">Gastos de Caja</span><span className="num font-semibold text-rose-300">−{formatMoney(shift.totals.totalExpenses, currency)}</span></div>
+            {Number(shift.totals.cashTransfersIn || 0) > 0 ? <div className="flex justify-between gap-3 text-[10px]"><span className="text-slate-400">Traspasos que entran a caja</span><span className="num font-semibold text-emerald-300">+{formatMoney(shift.totals.cashTransfersIn || 0, currency)}</span></div> : null}
+            {Number(shift.totals.cashTransfersOut || 0) > 0 ? <div className="flex justify-between gap-3 text-[10px]"><span className="text-slate-400">Traspasos que salen de caja</span><span className="num font-semibold text-amber-300">−{formatMoney(shift.totals.cashTransfersOut || 0, currency)}</span></div> : null}
+            <div className="flex justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold"><span className="text-slate-200">Total Efectivo Esperado</span><span className="num text-sky-300">{isAdmin && expected !== null ? formatMoney(expected, currency) : '—'}</span></div>
+            <div className="flex justify-between gap-3 font-bold"><span className="text-slate-200">Saldo en contra (−) o a favor (+)</span><span className={`num ${balanced ? 'text-emerald-300' : difference > 0 ? 'text-amber-300' : 'text-rose-300'}`}>{isAdmin ? `${difference > 0 ? '+' : ''}${formatMoney(difference, currency)}` : 'Registrada'}</span></div>
+            <div className="flex justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold"><span className="text-slate-200">Total Efectivo en Caja</span><span className="num text-emerald-300">{isAdmin && counted !== null ? formatMoney(counted, currency) : 'Registrado'}</span></div>
+          </div>
           {closing?.notes ? (
             <div className="mt-3 border-t border-slate-800 pt-3">
               <p className="label mb-1">Observaciones del cierre</p>

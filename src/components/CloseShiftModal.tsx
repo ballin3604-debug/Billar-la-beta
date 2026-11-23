@@ -197,35 +197,75 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
           </div>
         ) : null}
 
-        {isAdmin && expectedCash !== undefined ? (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="kpi">
-              <p className="label mb-1">Total Efectivo esperado</p>
-              <p className="num text-base font-bold text-sky-300">
-                {formatMoney(expectedCash, currency)}
-              </p>
-            </div>
-            <div className="kpi">
-              <p className="label mb-1">Total de Efectivo en Caja</p>
-              <p className="num text-base font-bold text-emerald-300">
-                {formatMoney(countedCash, currency)}
-              </p>
-            </div>
-            <div className="kpi">
-              <p className="label mb-1">Saldo en contra (−) o a favor (+)</p>
-              <p
-                className={`num text-base font-bold ${
+        {isAdmin && expectedCash !== undefined && currentShift ? (
+          <div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
+            <p className="label mb-2">Resumen de arqueo</p>
+            <div className="space-y-1.5 text-[11px]">
+              {[
+                { label: 'V. Productos', value: formatMoney(currentShift.totals.totalProducts, currency), cls: 'text-slate-200' },
+                { label: 'Tiempo Billar', value: formatMoney(currentShift.totals.totalBilliard, currency), cls: 'text-slate-200' },
+                { label: 'Cambio', value: formatMoney(currentShift.initialCash, currency), cls: 'text-slate-200' },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-3">
+                  <span className="text-slate-400">{row.label}</span>
+                  <span className={`num font-semibold ${row.cls}`}>{row.value}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold">
+                <span className="text-slate-200">Total V.P. + T.B. + C.</span>
+                <span className="num text-emerald-300">
+                  {formatMoney(
+                    currentShift.totals.totalWithChange ?? (Number(currentShift.initialCash || 0) + Number(currentShift.totals.grossTotal || 0)),
+                    currency
+                  )}
+                </span>
+              </div>
+              {Number(currentShift.totals.pendingTotal || 0) > 0 ? (
+                <div className="flex items-center justify-between gap-3 text-[10px] text-amber-300/90">
+                  <span>Consumo por cobrar (aún no entra a caja)</span>
+                  <span className="num">−{formatMoney(currentShift.totals.pendingTotal || 0, currency)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-400">QR</span>
+                <span className="num font-semibold text-sky-300">−{formatMoney(currentShift.totals.totalQr, currency)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-400">Gastos de Caja</span>
+                <span className="num font-semibold text-rose-300">−{formatMoney(currentShift.totals.totalExpenses, currency)}</span>
+              </div>
+              {transfersIn > 0 ? (
+                <div className="flex items-center justify-between gap-3 text-[10px]">
+                  <span className="text-slate-400">Traspasos que entran a caja</span>
+                  <span className="num font-semibold text-emerald-300">+{formatMoney(transfersIn, currency)}</span>
+                </div>
+              ) : null}
+              {transfersOut > 0 ? (
+                <div className="flex items-center justify-between gap-3 text-[10px]">
+                  <span className="text-slate-400">Traspasos que salen de caja</span>
+                  <span className="num font-semibold text-amber-300">−{formatMoney(transfersOut, currency)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold">
+                <span className="text-slate-200">Total Efectivo Esperado</span>
+                <span className="num text-sky-300">{formatMoney(expectedCash, currency)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 font-bold">
+                <span className="text-slate-200">Saldo en contra (−) o a favor (+)</span>
+                <span className={`num ${
                   difference === null || Math.abs(difference) < 0.01
                     ? 'text-emerald-300'
                     : difference > 0
                     ? 'text-amber-300'
                     : 'text-rose-300'
-                }`}
-              >
-                {difference === null
-                  ? '—'
-                  : `${difference > 0 ? '+' : ''}${formatMoney(difference, currency)}`}
-              </p>
+                }`}>
+                  {difference === null ? '—' : `${difference > 0 ? '+' : ''}${formatMoney(difference, currency)}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-1.5 font-bold">
+                <span className="text-slate-200">Total Efectivo en Caja</span>
+                <span className="num text-emerald-300">{formatMoney(countedCash, currency)}</span>
+              </div>
             </div>
           </div>
         ) : (
@@ -239,41 +279,30 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
           </div>
         )}
 
-        {activeTransfers.length > 0 ? (
+        {!isAdmin && activeTransfers.length > 0 ? (
           <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.05] px-3.5 py-3">
             <div className="flex items-center gap-2 text-[11px] font-bold text-violet-200">
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              {isAdmin ? 'Traspasos QR ↔ efectivo del turno' : 'Tus traspasos QR ↔ efectivo'}
+              Tus traspasos QR ↔ efectivo
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
               <div>
                 <p className="text-slate-500">Entran a caja</p>
-                <p className="num mt-0.5 font-bold text-emerald-300">
-                  +{formatMoney(transfersIn, currency)}
-                </p>
+                <p className="num mt-0.5 font-bold text-emerald-300">+{formatMoney(transfersIn, currency)}</p>
               </div>
               <div>
                 <p className="text-slate-500">Salen de caja</p>
-                <p className="num mt-0.5 font-bold text-amber-300">
-                  −{formatMoney(transfersOut, currency)}
-                </p>
+                <p className="num mt-0.5 font-bold text-amber-300">−{formatMoney(transfersOut, currency)}</p>
               </div>
               <div>
                 <p className="text-slate-500">Neto en efectivo</p>
-                <p
-                  className={`num mt-0.5 font-bold ${
-                    transfersNet < 0 ? 'text-amber-300' : 'text-emerald-300'
-                  }`}
-                >
-                  {transfersNet > 0 ? '+' : ''}
-                  {formatMoney(transfersNet, currency)}
+                <p className={`num mt-0.5 font-bold ${transfersNet < 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
+                  {transfersNet > 0 ? '+' : ''}{formatMoney(transfersNet, currency)}
                 </p>
               </div>
             </div>
             <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
-              {isAdmin
-                ? 'Ya están incluidos en el efectivo esperado. No cuentan como venta ni como gasto.'
-                : 'Solo se muestran los traspasos que registraste. El administrador verá el efecto completo en el arqueo.'}
+              Solo se muestran los traspasos que registraste. El administrador verá el efecto completo en el arqueo.
             </p>
           </div>
         ) : null}
