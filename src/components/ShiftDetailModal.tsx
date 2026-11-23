@@ -567,28 +567,29 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                   {shift.tableSummary.length === 0 ? (
                     <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin movimientos.</p>
                   ) : (
-                    <table className="data-table">
-                      <thead className="table-head">
-                        <tr>
-                          <th>Mesa</th>
-                          <th className="text-center">N°</th>
-                          <th className="text-right">Tiempo Billar</th>
-                          <th className="text-right">Consumo</th>
-                          <th className="text-right">Total (Billar + Consumo)</th>
-                          <th className="text-right">Ver</th>
-                        </tr>
-                      </thead>
+                    <div className="overflow-x-auto">
+                      <table className="data-table min-w-[560px] text-[11px]">
+                        <thead className="table-head">
+                          <tr>
+                            <th className="px-2 py-2">Mesa</th>
+                            <th className="px-2 py-2 text-center">N°</th>
+                            <th className="px-2 py-2 text-right" title="Tiempo Billar">Billar</th>
+                            <th className="px-2 py-2 text-right">Consumo</th>
+                            <th className="px-2 py-2 text-right" title="Tiempo Billar + Consumo">Total</th>
+                            <th className="w-10 px-2 py-2 text-right"></th>
+                          </tr>
+                        </thead>
                       <tbody>
                         {shift.tableSummary.map((row) => {
                           const selected = selectedSummaryKey === row.tableId;
                           return (
                             <tr key={row.tableId} className={cn('cursor-pointer', selected && 'bg-emerald-500/[0.08]')} onClick={() => setSelectedSummaryKey(row.tableId)}>
-                              <td className="font-medium text-slate-200">{row.tableName}</td>
-                              <td className="num text-center">{row.playsCount}{Number(row.openCount || 0) > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{row.openCount}</span> : null}</td>
-                              <td className="num text-right">{formatMoney(row.billiard, currency)}</td>
-                              <td className="num text-right">{formatMoney(row.products, currency)}</td>
-                              <td className="num text-right font-bold text-slate-200">{formatMoney(row.total, currency)}</td>
-                              <td className="text-right">
+                              <td className="whitespace-nowrap px-2 py-2 font-medium text-slate-200">{row.tableName}</td>
+                              <td className="num px-2 py-2 text-center">{row.playsCount}{Number(row.openCount || 0) > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{row.openCount}</span> : null}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(row.billiard, currency)}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(row.products, currency)}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right font-bold text-slate-200">{formatMoney(row.total, currency)}</td>
+                              <td className="px-2 py-2 text-right">
                                 <button type="button" className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border transition', selected ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400 hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300')} title={`Ver detalle de ${row.tableName}`} onClick={(e) => { e.stopPropagation(); setSelectedSummaryKey(row.tableId); setTableDetailId(row.tableId); }}>
                                   <Eye className="h-3.5 w-3.5" />
                                 </button>
@@ -605,12 +606,12 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                           const selected = selectedSummaryKey === 'direct';
                           return (
                             <tr className={cn('cursor-pointer', selected ? 'bg-emerald-500/[0.08]' : 'bg-slate-900/40')} onClick={() => setSelectedSummaryKey('direct')}>
-                              <td className="font-medium text-slate-200">Ventas Directas / Clientes</td>
-                              <td className="num text-center">{quickCount}{quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{quickOpen}</span> : null}</td>
-                              <td className="num text-right">{formatMoney(0, currency)}</td>
-                              <td className="num text-right">{formatMoney(quickProducts, currency)}</td>
-                              <td className="num text-right font-bold text-slate-200">{formatMoney(quickProducts, currency)}</td>
-                              <td className="text-right">
+                              <td className="whitespace-nowrap px-2 py-2 font-medium text-slate-200">Directas / Clientes</td>
+                              <td className="num px-2 py-2 text-center">{quickCount}{quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{quickOpen}</span> : null}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(0, currency)}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(quickProducts, currency)}</td>
+                              <td className="num whitespace-nowrap px-2 py-2 text-right font-bold text-slate-200">{formatMoney(quickProducts, currency)}</td>
+                              <td className="px-2 py-2 text-right">
                                 <button type="button" className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border transition', selected ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400 hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300')} title="Ver detalle de Ventas Directas / Clientes" onClick={(e) => { e.stopPropagation(); setSelectedSummaryKey('direct'); }}>
                                   <Eye className="h-3.5 w-3.5" />
                                 </button>
@@ -621,15 +622,16 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-slate-700 bg-slate-900/40 font-bold">
-                          <td className="text-slate-300">Total turno</td>
-                          <td className="num text-center text-slate-200">{shift.totals.playsCount}</td>
-                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.totalBilliard, currency)}</td>
-                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.totalProducts, currency)}</td>
-                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.grossTotal, currency)}</td>
-                          <td />
+                          <td className="whitespace-nowrap px-2 py-2 text-slate-300">Total turno</td>
+                          <td className="num px-2 py-2 text-center text-slate-200">{Number(shift.totals.playsCount || 0) + Number(shift.quickSalesSummary?.count ?? shift.sales.filter((s) => s.status === 'active').length)}</td>
+                          <td className="num whitespace-nowrap px-2 py-2 text-right text-slate-200">{formatMoney(shift.totals.totalBilliard, currency)}</td>
+                          <td className="num whitespace-nowrap px-2 py-2 text-right text-slate-200">{formatMoney(shift.totals.totalProducts, currency)}</td>
+                          <td className="num whitespace-nowrap px-2 py-2 text-right text-slate-200">{formatMoney(shift.totals.grossTotal, currency)}</td>
+                          <td className="px-2 py-2" />
                         </tr>
                       </tfoot>
                     </table>
+                    </div>
                   )}
                 </div>
 
@@ -641,25 +643,27 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                   {selectedTableProducts.items.length === 0 ? (
                     <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin consumo de productos en esta mesa.</p>
                   ) : (
-                    <table className="data-table">
-                      <thead className="table-head"><tr><th>Producto</th><th className="text-right">P. Unit.</th><th className="text-center">Cant.</th><th className="text-right">Importe</th></tr></thead>
+                    <div className="overflow-x-auto">
+                    <table className="data-table text-[11px]">
+                      <thead className="table-head"><tr><th className="px-2 py-2">Producto</th><th className="px-2 py-2 text-right">P. Unit.</th><th className="px-2 py-2 text-center">Cant.</th><th className="px-2 py-2 text-right">Importe</th></tr></thead>
                       <tbody>
                         {selectedTableProducts.items.map((row) => (
                           <tr key={row.name}>
-                            <td className="text-slate-200">{row.name}</td>
-                            <td className="num text-right text-slate-400">{formatMoney(row.unitPrice, currency)}</td>
-                            <td className="num text-center">{row.quantity}</td>
-                            <td className="num text-right">{formatMoney(row.amount, currency)}</td>
+                            <td className="px-2 py-2 text-slate-200">{row.name}</td>
+                            <td className="num whitespace-nowrap px-2 py-2 text-right text-slate-400">{formatMoney(row.unitPrice, currency)}</td>
+                            <td className="num px-2 py-2 text-center">{row.quantity}</td>
+                            <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(row.amount, currency)}</td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="font-bold text-slate-300">Total</td><td /><td className="num text-center font-bold text-slate-200">{selectedTableProducts.items.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num text-right font-bold text-slate-200">{formatMoney(selectedTableProducts.items.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
+                      <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="px-2 py-2 font-bold text-slate-300">Total</td><td className="px-2 py-2" /><td className="num px-2 py-2 text-center font-bold text-slate-200">{selectedTableProducts.items.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num whitespace-nowrap px-2 py-2 text-right font-bold text-slate-200">{formatMoney(selectedTableProducts.items.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
                     </table>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-800 bg-[#08111d]">
+              <div className="min-w-0 overflow-hidden rounded-xl border border-slate-800 bg-[#08111d]">
                 <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                   <ShoppingBag className="h-4 w-4 text-slate-500" />
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Productos vendidos del turno</p>
@@ -667,27 +671,29 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 {shift.productSummary.length === 0 ? (
                   <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin productos.</p>
                 ) : (
-                  <table className="data-table">
-                    <thead className="table-head"><tr><th>Producto</th><th className="text-right">P. Unit.</th><th className="text-center">Cant.</th><th className="text-right">Importe</th></tr></thead>
+                  <div className="overflow-x-auto">
+                  <table className="data-table text-[11px]">
+                    <thead className="table-head"><tr><th className="px-2 py-2">Producto</th><th className="px-2 py-2 text-right">P. Unit.</th><th className="px-2 py-2 text-center">Cant.</th><th className="px-2 py-2 text-right">Importe</th></tr></thead>
                     <tbody>
                       {shift.productSummary.map((row) => {
                         const unitPrice = Number(row.unitPrice || 0) || (Number(row.quantity) > 0 ? Number(row.amount) / Number(row.quantity) : 0);
                         return (
                           <tr key={row.name}>
-                            <td className="text-slate-200">{row.name}</td>
-                            <td className="num text-right text-slate-400">{formatMoney(unitPrice, currency)}</td>
-                            <td className="num text-center">{row.quantity}</td>
-                            <td className="num text-right">{formatMoney(row.amount, currency)}</td>
+                            <td className="px-2 py-2 text-slate-200">{row.name}</td>
+                            <td className="num whitespace-nowrap px-2 py-2 text-right text-slate-400">{formatMoney(unitPrice, currency)}</td>
+                            <td className="num px-2 py-2 text-center">{row.quantity}</td>
+                            <td className="num whitespace-nowrap px-2 py-2 text-right">{formatMoney(row.amount, currency)}</td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="font-bold text-slate-300">Total</td><td /><td className="num text-center font-bold text-slate-200">{shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num text-right font-bold text-slate-200">{formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
+                    <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="px-2 py-2 font-bold text-slate-300">Total</td><td className="px-2 py-2" /><td className="num px-2 py-2 text-center font-bold text-slate-200">{shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num whitespace-nowrap px-2 py-2 text-right font-bold text-slate-200">{formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
                   </table>
+                  </div>
                 )}
               </div>
 
-<div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
+              <div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
                 <div className="grid gap-3 text-[11px] sm:grid-cols-4">
                   <div>
                     <p className="label mb-1">Cambio</p>
