@@ -167,11 +167,11 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
             ) : null}
             <tr>
               <th className={thClass}>QR</th>
-              <td className={tdClass}>- {formatMoney(shift.totals.totalQr, currency)}</td>
+              <td className={tdClass}>−{formatMoney(shift.totals.totalQr, currency)}</td>
             </tr>
             <tr>
               <th className={thClass}>Gastos de Caja</th>
-              <td className={tdClass}>- {formatMoney(shift.totals.totalExpenses, currency)}</td>
+              <td className={tdClass}>−{formatMoney(shift.totals.totalExpenses, currency)}</td>
             </tr>
             {transfersIn > 0 ? (
               <tr>

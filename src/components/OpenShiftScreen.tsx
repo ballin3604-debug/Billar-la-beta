@@ -19,7 +19,7 @@ import { Logo } from './Logo';
 const CHECKS = [
   {
     icon: <Banknote className="h-4 w-4" />,
-    title: 'Fondo inicial fijo',
+    title: 'Cambio fijo',
     text: 'El encargado define el monto en Ajustes. No se cambia al abrir la caja.',
   },
   {
@@ -119,7 +119,7 @@ export const OpenShiftScreen: React.FC = () => {
           <div className="border-b border-slate-800/80 px-5 py-4">
             <div className="flex items-center gap-2 text-emerald-400">
               <WalletCards className="h-4 w-4" />
-              <h2 className="text-sm font-bold text-white">Fondo inicial de caja</h2>
+              <h2 className="text-sm font-bold text-white">Cambio de caja</h2>
             </div>
             <p className="mt-1 text-[11px] text-slate-500">
               Monto fijo definido por el encargado en Información general.

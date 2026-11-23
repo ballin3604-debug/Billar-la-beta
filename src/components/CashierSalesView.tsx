@@ -116,9 +116,9 @@ export const CashierSalesView: React.FC = () => {
         key: `sale-${sale.id}`,
         kind: 'barra',
         time: sale.createdAt,
-        title: customerName ? `Cliente: ${customerName}` : 'Venta rápida',
+        title: customerName ? `Cliente: ${customerName}` : 'Venta directa',
         subtitle: customerName
-          ? `Venta por cliente · ${sale.createdByName}`
+          ? `Venta directa / Cliente · ${sale.createdByName}`
           : `Barra · ${sale.createdByName}`,
         detail: sale.items.length
           ? sale.items.map((item) => `${item.quantity}× ${item.name}`).join(' · ')
@@ -306,7 +306,7 @@ export const CashierSalesView: React.FC = () => {
           value={formatMoney(totals.grossTotal, currency)}
           hint={`${plural(totals.playsCount, 'partida', 'partidas')} · ${plural(
             totals.salesCount,
-            'venta rápida',
+            'venta directa',
             'ventas rápidas'
           )}`}
           icon={<Wallet className="h-4 w-4" />}
@@ -413,7 +413,7 @@ export const CashierSalesView: React.FC = () => {
         {movements.length === 0 ? (
           <EmptyState
             title="Aún no hay ventas en este turno"
-            description="Cuando cobres una mesa o registres una venta rápida, aparecerá aquí con su forma de pago."
+            description="Cuando cobres una mesa o registres una venta directa/cliente, aparecerá aquí con su forma de pago."
             icon={<ShoppingBag className="h-6 w-6" />}
             className="m-4"
           />

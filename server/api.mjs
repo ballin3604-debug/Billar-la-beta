@@ -463,8 +463,8 @@ export function createApiRouter() {
       throw new HttpError(409, 'Ya hay una caja abierta. Ciérrala antes de abrir otra.');
     }
     const settings = getSettings();
-    // El fondo inicial es fijo para todos los usuarios. Solo se cambia
-    // desde Ajustes > Informacion general.
+    // El cambio es fijo para todos los usuarios. Solo se cambia
+    // desde Ajustes > Información general.
     const initialCash = round2(Number(settings.defaultInitialCash || 0));
     const openedAt = nowIso();
 

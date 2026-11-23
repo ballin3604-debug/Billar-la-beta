@@ -622,7 +622,7 @@ export const SettingsView: React.FC = () => {
                     </div>
                     <div>
                       <label className="label" htmlFor="default-initial-cash">
-                        Fondo inicial fijo ({currency})
+                        Cambio fijo ({currency})
                       </label>
                       <input
                         id="default-initial-cash"

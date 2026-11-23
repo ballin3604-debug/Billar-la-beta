@@ -20,8 +20,7 @@ import { StatCard } from './ui/StatCard';
 import { TableCard } from './TableCard';
 import { OrderPanel } from './OrderPanel';
 import { CheckoutModal } from './CheckoutModal';
-import { BarSaleModal } from './BarSaleModal';
-import { CustomerTabsModal } from './CustomerTabsModal';
+import { DirectSaleModal } from './DirectSaleModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { EmptyState } from './ui/EmptyState';
 
@@ -41,8 +40,7 @@ export const TablesView: React.FC = () => {
   const isAdmin = user?.role === 'admin';
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [checkoutId, setCheckoutId] = useState<number | null>(null);
-  const [barOpen, setBarOpen] = useState(false);
-  const [customerTabsOpen, setCustomerTabsOpen] = useState(false);
+  const [directSaleOpen, setDirectSaleOpen] = useState(false);
   const [pendingTable, setPendingTable] = useState<Table | null>(null);
   const [startPlayerType, setStartPlayerType] = useState<TablePlayerType>('normal');
   const [startBusy, setStartBusy] = useState<number | null>(null);
@@ -161,13 +159,9 @@ export const TablesView: React.FC = () => {
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-          <button type="button" className="btn-secondary" onClick={() => setCustomerTabsOpen(true)}>
-            <Users className="h-4 w-4 text-violet-400" />
-            Ventas por cliente
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
+          <button type="button" className="btn-secondary" onClick={() => setDirectSaleOpen(true)}>
             <CupSoda className="h-4 w-4 text-sky-400" />
-            Venta rápida
+            Venta directa / Cliente
           </button>
         </div>
       </div>
@@ -445,8 +439,7 @@ export const TablesView: React.FC = () => {
         }}
       />
 
-      <BarSaleModal open={barOpen} onClose={() => setBarOpen(false)} />
-      <CustomerTabsModal open={customerTabsOpen} onClose={() => setCustomerTabsOpen(false)} />
+      <DirectSaleModal open={directSaleOpen} onClose={() => setDirectSaleOpen(false)} />
     </div>
   );
 };
