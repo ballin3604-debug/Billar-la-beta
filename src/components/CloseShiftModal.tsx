@@ -197,7 +197,7 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
           </div>
         ) : null}
 
-        {isAdmin && expectedCash !== undefined && currentShift ? (
+        {currentShift ? (
           <div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
             <p className="label mb-2">Resumen de arqueo</p>
             <div className="space-y-1.5 text-[11px]">
@@ -267,43 +267,6 @@ export const CloseShiftModal: React.FC<CloseShiftModalProps> = ({
                 <span className="num text-emerald-300">{formatMoney(countedCash, currency)}</span>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/[0.06] px-3.5 py-3 text-[11px] leading-relaxed text-sky-200/90">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <strong>Arqueo ciego:</strong> el sistema no muestra el efectivo esperado. Cuenta
-              toda la gaveta con calma e ingresa el total. El administrador revisará el arqueo al
-              cerrar.
-            </span>
-          </div>
-        )}
-
-        {!isAdmin && activeTransfers.length > 0 ? (
-          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.05] px-3.5 py-3">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-violet-200">
-              <ArrowLeftRight className="h-3.5 w-3.5" />
-              Tus traspasos QR ↔ efectivo
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
-              <div>
-                <p className="text-slate-500">Entran a caja</p>
-                <p className="num mt-0.5 font-bold text-emerald-300">+{formatMoney(transfersIn, currency)}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Salen de caja</p>
-                <p className="num mt-0.5 font-bold text-amber-300">−{formatMoney(transfersOut, currency)}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Neto en efectivo</p>
-                <p className={`num mt-0.5 font-bold ${transfersNet < 0 ? 'text-amber-300' : 'text-emerald-300'}`}>
-                  {transfersNet > 0 ? '+' : ''}{formatMoney(transfersNet, currency)}
-                </p>
-              </div>
-            </div>
-            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
-              Solo se muestran los traspasos que registraste. El administrador verá el efecto completo en el arqueo.
-            </p>
           </div>
         ) : null}
 
