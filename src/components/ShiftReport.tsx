@@ -167,11 +167,11 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
             ) : null}
             <tr>
               <th className={thClass}>QR</th>
-              <td className={tdClass}>−{formatMoney(shift.totals.totalQr, currency)}</td>
+              <td className={tdClass}>- {formatMoney(shift.totals.totalQr, currency)}</td>
             </tr>
             <tr>
               <th className={thClass}>Gastos de Caja</th>
-              <td className={tdClass}>−{formatMoney(shift.totals.totalExpenses, currency)}</td>
+              <td className={tdClass}>- {formatMoney(shift.totals.totalExpenses, currency)}</td>
             </tr>
             {transfersIn > 0 ? (
               <tr>
@@ -186,9 +186,14 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
               </tr>
             ) : null}
             <tr className="bg-slate-100">
-              <th className={thClass}>Total Efectivo esperado</th>
+              <th className={thClass}>Total Efectivo Esperado</th>
               <td className={`${tdClass} font-bold`}>
                 {expected !== undefined && expected !== null ? formatMoney(expected, currency) : '—'}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 bg-white px-2 py-1 text-[9px] text-slate-500" colSpan={2}>
+                Total Efectivo Esperado = Total (V.P. + T.B. + C.) − QR − Gastos de Caja{transfersIn > 0 || transfersOut > 0 ? ' ± Traspasos' : ''}
               </td>
             </tr>
             <tr>
@@ -203,11 +208,16 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
               </td>
             </tr>
             <tr>
-              <th className={thClass}>Total de Efectivo en Caja</th>
+              <td className="border border-slate-300 bg-white px-2 py-1 text-[9px] text-slate-500" colSpan={2}>
+                Saldo en contra (−) o a favor (+) = Efectivo Contado − Total Efectivo Esperado
+              </td>
+            </tr>
+            <tr>
+              <th className={thClass}>Total Efectivo en Caja</th>
               <td className={`${tdClass} font-bold`}>
                 {cashInDrawer !== null ? formatMoney(cashInDrawer, currency) : '—'}
                 <span className="ml-1 font-normal text-slate-500">
-                  {counted !== null ? '(contado)' : '(esperado)'}
+                  {counted !== null ? '(contado, monto físico final real en caja)' : '(esperado)'}
                 </span>
               </td>
             </tr>
@@ -382,19 +392,70 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                 <tr key={row.tableId}>
                   <td className={tdClass}>{row.tableName}</td>
                   <td className={`${tdClass} text-center`}>
-                    {row.playsCount}
+                    {Number(row.playsCount || 0)}
                     {Number(row.openCount || 0) > 0 ? (
                       <span className="ml-1 text-[9px] text-slate-500">
-                        + {row.openCount} abierta{row.openCount === 1 ? '' : 's'}
+                        + {row.openCount} abierta{Number(row.openCount) === 1 ? '' : 's'}
                       </span>
                     ) : null}
                   </td>
-                  <td className={tdClass}>{formatMoney(row.billiard, currency)}</td>
-                  <td className={tdClass}>{formatMoney(row.products, currency)}</td>
-                  <td className={`${tdClass} font-bold`}>{formatMoney(row.total, currency)}</td>
+                  <td className={tdClass}>{formatMoney(Number(row.billiard || 0), currency)}</td>
+                  <td className={tdClass}>{formatMoney(Number(row.products || 0), currency)}</td>
+                  <td className={`${tdClass} font-bold`}>{formatMoney(Number(row.total || 0), currency)}</td>
                 </tr>
               ))}
+              {(() => {
+                const quick = shift.quickSalesSummary;
+                const quickCount = quick?.count ?? shift.sales.filter((s) => s.status === 'active').length;
+                const quickOpen = quick?.openCount ?? (shift.openCustomerTabs?.length ?? 0);
+                const quickProducts =
+                  Number(quick?.products ?? 0) ||
+                  (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) +
+                    (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0));
+                if (quickCount === 0 && quickOpen === 0 && quickProducts <= 0) return null;
+                return (
+                  <tr className="bg-slate-50">
+                    <td className={tdClass}>Ventas Directas / Clientes</td>
+                    <td className={`${tdClass} text-center`}>
+                      {quickCount}
+                      {quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+ {quickOpen} abierta{quickOpen === 1 ? '' : 's'}</span> : null}
+                    </td>
+                    <td className={tdClass}>{formatMoney(0, currency)}</td>
+                    <td className={tdClass}>{formatMoney(quickProducts, currency)}</td>
+                    <td className={`${tdClass} font-bold`}>{formatMoney(quickProducts, currency)}</td>
+                  </tr>
+                );
+              })()}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold">
+                <td className={tdClass}>Total</td>
+                <td className={`${tdClass} text-center`}>
+                  {shift.tableSummary.reduce((sum, row) => sum + Number(row.playsCount || 0), 0)}
+                </td>
+                <td className={tdClass}>
+                  {formatMoney(shift.tableSummary.reduce((sum, row) => sum + Number(row.billiard || 0), 0), currency)}
+                </td>
+                <td className={tdClass}>
+                  {formatMoney(
+                    shift.tableSummary.reduce((sum, row) => sum + Number(row.products || 0), 0) +
+                      (Number(shift.quickSalesSummary?.products ?? 0) ||
+                        (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) +
+                          (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0))),
+                    currency
+                  )}
+                </td>
+                <td className={tdClass}>
+                  {formatMoney(
+                    shift.tableSummary.reduce((sum, row) => sum + Number(row.total || 0), 0) +
+                      (Number(shift.quickSalesSummary?.products ?? 0) ||
+                        (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) +
+                          (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0))),
+                    currency
+                  )}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}
@@ -408,19 +469,38 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
             <thead>
               <tr>
                 <th className={thClass}>Producto</th>
+                <th className={thClass}>P. Unit.</th>
                 <th className={thClass}>Cantidad</th>
                 <th className={thClass}>Importe</th>
               </tr>
             </thead>
             <tbody>
-              {shift.productSummary.map((row) => (
-                <tr key={row.name}>
-                  <td className={tdClass}>{row.name}</td>
-                  <td className={`${tdClass} text-center`}>{row.quantity}</td>
-                  <td className={tdClass}>{formatMoney(row.amount, currency)}</td>
-                </tr>
-              ))}
+              {shift.productSummary.map((row) => {
+                const qty = Number(row.quantity || 0);
+                const amount = Number(row.amount || 0);
+                const unit = Number(row.unitPrice || 0) || (qty > 0 ? amount / qty : 0);
+                return (
+                  <tr key={row.name}>
+                    <td className={tdClass}>{row.name}</td>
+                    <td className={tdClass}>{formatMoney(unit, currency)}</td>
+                    <td className={`${tdClass} text-center`}>{qty}</td>
+                    <td className={tdClass}>{formatMoney(amount, currency)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold">
+                <td className={tdClass}>Total</td>
+                <td className={tdClass}>—</td>
+                <td className={`${tdClass} text-center`}>
+                  {shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}
+                </td>
+                <td className={tdClass}>
+                  {formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}
@@ -466,9 +546,9 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                   <td className={tdClass}>{formatDateTime(play.startTime)}</td>
                   <td className={tdClass}>{formatDateTime(play.endTime)}</td>
                   <td className={tdClass}>{durationLabel(play.durationMinutes)}</td>
-                  <td className={tdClass}>{formatMoney(play.billiardAmount, currency)}</td>
-                  <td className={tdClass}>{formatMoney(play.productsAmount, currency)}</td>
-                  <td className={`${tdClass} font-bold`}>{formatMoney(play.totalAmount, currency)}</td>
+                  <td className={tdClass}>{formatMoney(Number(play.billiardAmount || 0), currency)}</td>
+                  <td className={tdClass}>{formatMoney(Number(play.productsAmount || 0), currency)}</td>
+                  <td className={`${tdClass} font-bold`}>{formatMoney(Number(play.totalAmount || 0), currency)}</td>
                   <td className={tdClass}>{paymentLabel(play.paymentMethod)}</td>
                   <td className={tdClass}>
                     {play.status === 'voided' ? `Anulada: ${play.voidReason || ''}` : 'Cobrada'}
@@ -476,6 +556,15 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold">
+                <td className={tdClass} colSpan={5}>Totales (activas)</td>
+                <td className={tdClass}>{formatMoney(shift.tablePlays.filter(p=>p.status==='active').reduce((s,p)=>s+Number(p.billiardAmount||0),0), currency)}</td>
+                <td className={tdClass}>{formatMoney(shift.tablePlays.filter(p=>p.status==='active').reduce((s,p)=>s+Number(p.productsAmount||0),0), currency)}</td>
+                <td className={tdClass}>{formatMoney(shift.tablePlays.filter(p=>p.status==='active').reduce((s,p)=>s+Number(p.totalAmount||0),0), currency)}</td>
+                <td className={tdClass} colSpan={2}>{shift.tablePlays.filter(p=>p.status==='active').length} partidas</td>
+              </tr>
+            </tfoot>
           </table>
         )}
       </div>
@@ -500,9 +589,9 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                 <tr key={sale.id}>
                   <td className={tdClass}>{formatDateTime(sale.createdAt)}</td>
                   <td className={tdClass}>
-                    {sale.items.map((item) => `${item.quantity}× ${item.name}`).join(', ')}
+                    {sale.items.map((item) => `${Number(item.quantity||0)}× ${item.name}`).join(', ')}
                   </td>
-                  <td className={`${tdClass} font-bold`}>{formatMoney(sale.totalAmount, currency)}</td>
+                  <td className={`${tdClass} font-bold`}>{formatMoney(Number(sale.totalAmount || 0), currency)}</td>
                   <td className={tdClass}>{paymentLabel(sale.paymentMethod)}</td>
                   <td className={tdClass}>
                     {sale.status === 'voided' ? `Anulada: ${sale.voidReason || ''}` : 'Cobrada'}
@@ -510,6 +599,13 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold">
+                <td className={tdClass} colSpan={2}>Total ventas activas</td>
+                <td className={tdClass}>{formatMoney(shift.sales.filter(s=>s.status==='active').reduce((s,x)=>s+Number(x.totalAmount||0),0), currency)}</td>
+                <td className={tdClass} colSpan={2}>{shift.sales.filter(s=>s.status==='active').length} ventas</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}
@@ -539,18 +635,30 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
                       : expense.items
                           .map(
                             (item) =>
-                              `${item.quantity}× ${item.name} (${formatMoney(item.unitPrice, currency)} c/u)`
+                              `${Number(item.quantity || 0)}× ${item.name} (${formatMoney(Number(item.unitPrice || 0), currency)} c/u)`
                           )
                           .join(', ')}
                   </td>
                   <td className={tdClass}>{expenseCategoryLabel(expense.category)}</td>
-                  <td className={`${tdClass} font-bold`}>{formatMoney(expense.amount, currency)}</td>
+                  <td className={`${tdClass} font-bold`}>{formatMoney(Number(expense.amount || 0), currency)}</td>
                   <td className={tdClass}>
                     {expense.status === 'voided' ? `Anulado: ${expense.voidReason || ''}` : 'Activo'}
                   </td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold">
+                <td className={tdClass} colSpan={4}>Total gastos activos</td>
+                <td className={tdClass}>
+                  {formatMoney(
+                    shift.expenses.filter((e) => e.status === 'active').reduce((sum, e) => sum + Number(e.amount || 0), 0),
+                    currency
+                  )}
+                </td>
+                <td className={tdClass}>{shift.expenses.filter((e) => e.status === 'active').length}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       ) : null}

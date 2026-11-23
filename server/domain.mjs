@@ -744,58 +744,12 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
 
   // La planilla de un turno pertenece a una sola fecha. Se incluye la
   // madrugada siguiente hasta el mediodía para no cortar mesas nocturnas.
-  const shiftPlays = activePlays.filter((play) =>
-    isInsideShiftWindow(play.startTime, window)
-  );
-  const shiftSales = activeSales.filter((sale) =>
-    isInsideShiftWindow(sale.createdAt, window)
-  );
-  const shiftExpenses = activeExpenses.filter((expense) =>
-    isInsideShiftWindow(expense.createdAt, window)
-  );
-  const shiftTransfers = activeTransfers.filter((transfer) =>
-    isInsideShiftWindow(transfer.createdAt, window)
-  );
-
-  const outOfRangeMap = new Map();
-  const addOutOfRange = (value, amount) => {
-    const date = shiftRecordDate(value);
-    if (!date) return;
-    const current = outOfRangeMap.get(date) || { date, count: 0, total: 0 };
-    current.count += 1;
-    current.total = round2(current.total + Number(amount || 0));
-    outOfRangeMap.set(date, current);
-  };
-  for (const play of activePlays) {
-    if (!isInsideShiftWindow(play.startTime, window)) {
-      addOutOfRange(play.startTime, play.totalAmount);
-    }
-  }
-  for (const sale of activeSales) {
-    if (!isInsideShiftWindow(sale.createdAt, window)) {
-      addOutOfRange(sale.createdAt, sale.totalAmount);
-    }
-  }
-  for (const expense of activeExpenses) {
-    if (!isInsideShiftWindow(expense.createdAt, window)) {
-      addOutOfRange(expense.createdAt, expense.amount);
-    }
-  }
-  for (const transfer of activeTransfers) {
-    if (!isInsideShiftWindow(transfer.createdAt, window)) {
-      addOutOfRange(transfer.createdAt, transfer.amount);
-    }
-  }
-  const outOfRangeDates = [...outOfRangeMap.values()].sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
-  const outOfRangeCount = outOfRangeDates.reduce((sum, item) => sum + item.count, 0);
-  const outOfRangeTotal = round2(
-    outOfRangeDates.reduce((sum, item) => sum + item.total, 0)
-  );
-  const outOfRange = outOfRangeCount > 0
-    ? { count: outOfRangeCount, total: outOfRangeTotal, dates: outOfRangeDates }
-    : null;
+  // La planilla del turno incluye todos los movimientos registrados con ese shift_id.
+  const shiftPlays = activePlays;
+  const shiftSales = activeSales;
+  const shiftExpenses = activeExpenses;
+  const shiftTransfers = activeTransfers;
+  const outOfRange = null;
 
   // Mesas y ventas por cliente que siguen abiertas: todavía no están
   // cobradas, pero su tiempo y consumo deben reflejarse en la planilla.
@@ -841,12 +795,12 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
       totalAmount: round2(calculation.cost + productsAmount),
       items,
       itemsAmount: productsAmount,
-      outsideShiftDate: !isInsideShiftWindow(row.start_time, window),
+      outsideShiftDate: false,
     };
   });
   const openCustomerTabs = getOpenCustomerTabs(shiftId).map((tab) => ({
     ...tab,
-    outsideShiftDate: !isInsideShiftWindow(tab.createdAt, window),
+    outsideShiftDate: false,
   }));
 
   const pendingBilliard = round2(
@@ -1214,8 +1168,7 @@ export function getCashierShiftDetail(shiftId, viewer) {
     });
   }
   const expenses = expenseRows
-    .map((row) => mapExpense(row, expenseItemsByExpense.get(row.id) || []))
-    .filter((expense) => isInsideShiftWindow(expense.createdAt, window));
+    .map((row) => mapExpense(row, expenseItemsByExpense.get(row.id) || []));
   const activeExpenses = expenses.filter((expense) => expense.status === 'active');
   const totalExpenses = round2(
     activeExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0)

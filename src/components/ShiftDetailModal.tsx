@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeftRight,
   Ban,
   ClipboardList,
   Clock3,
+  Eye,
   FileSpreadsheet,
   History,
   Loader2,
@@ -78,6 +79,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>('resumen');
+  const [tableDetailId, setTableDetailId] = useState<number | null>(null);
   const currency = settings?.currency || 'Bs';
   const isAdmin = user?.role === 'admin';
   const cashTransfers = shift?.cashTransfers ?? [];
@@ -118,6 +120,30 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
   const hasDifference = difference !== null && Math.abs(Number(difference)) > 0.009;
   const transfersNet =
     Number(shift?.totals.cashTransfersIn ?? 0) - Number(shift?.totals.cashTransfersOut ?? 0);
+
+  const tableDetail = useMemo(() => {
+    if (!shift || tableDetailId === null) return null;
+    const tableRow = shift.tableSummary.find((row) => row.tableId === tableDetailId);
+    const plays = shift.tablePlays.filter((play) => play.tableId === tableDetailId);
+    const openSessions = (shift.openSessions ?? []).filter((session) => session.tableId === tableDetailId);
+    const itemsMap = new Map<string, { name: string; quantity: number; amount: number }>();
+    const add = (name: string, quantity: number, amount: number) => {
+      const current = itemsMap.get(name) || { name, quantity: 0, amount: 0 };
+      current.quantity += Number(quantity || 0);
+      current.amount += Number(amount || 0);
+      itemsMap.set(name, current);
+    };
+    plays.forEach((play) => play.items.forEach((item) => add(item.name, item.quantity, Number(item.price) * Number(item.quantity))));
+    openSessions.forEach((session) => session.items.forEach((item) => add(item.name, item.quantity, Number(item.price) * Number(item.quantity))));
+    const items = [...itemsMap.values()].sort((a, b) => b.amount - a.amount);
+    return {
+      tableName: tableRow?.tableName || plays[0]?.tableName || openSessions[0]?.tableName || 'Mesa',
+      plays,
+      openSessions,
+      items,
+      total: items.reduce((sum, item) => sum + item.amount, 0),
+    };
+  }, [shift, tableDetailId]);
 
   return (
     <Modal
@@ -508,6 +534,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                           <th className="text-right">Tiempo Billar</th>
                           <th className="text-right">Venta de Productos</th>
                           <th className="text-right">Total</th>
+                          <th className="text-right">Detalle</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -527,8 +554,41 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                             <td className="num text-right font-bold text-slate-200">
                               {formatMoney(row.total, currency)}
                             </td>
+                            <td className="text-right">
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300"
+                                title={`Ver detalle de ${row.tableName}`}
+                                onClick={() => setTableDetailId(row.tableId)}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
                           </tr>
                         ))}
+                        {(() => {
+                          const quick = shift.quickSalesSummary;
+                          const quickCount = quick?.count ?? shift.sales.filter((sale) => sale.status === 'active').length;
+                          const quickOpen = quick?.openCount ?? (shift.openCustomerTabs?.length ?? 0);
+                          const quickProducts =
+                            quick?.products ??
+                            shift.sales.filter((sale) => sale.status === 'active').reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0) +
+                              (shift.openCustomerTabs ?? []).reduce((sum, tab) => sum + Number(tab.itemsAmount || 0), 0);
+                          if (quickCount === 0 && quickOpen === 0 && quickProducts <= 0) return null;
+                          return (
+                            <tr className="bg-slate-900/40">
+                              <td className="font-medium text-slate-200">Ventas Directas / Clientes</td>
+                              <td className="num text-center">
+                                {quickCount}
+                                {quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{quickOpen}</span> : null}
+                              </td>
+                              <td className="num text-right">{formatMoney(0, currency)}</td>
+                              <td className="num text-right">{formatMoney(quickProducts, currency)}</td>
+                              <td className="num text-right font-bold text-slate-200">{formatMoney(quickProducts, currency)}</td>
+                              <td className="text-right text-[10px] text-slate-500">—</td>
+                            </tr>
+                          );
+                        })()}
                       </tbody>
                     </table>
                   )}
@@ -548,19 +608,36 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                       <thead className="table-head">
                         <tr>
                           <th>Producto</th>
+                          <th className="text-right">P. Unit.</th>
                           <th className="text-center">Cant.</th>
                           <th className="text-right">Importe</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {shift.productSummary.map((row) => (
-                          <tr key={row.name}>
-                            <td className="text-slate-200">{row.name}</td>
-                            <td className="num text-center">{row.quantity}</td>
-                            <td className="num text-right">{formatMoney(row.amount, currency)}</td>
-                          </tr>
-                        ))}
+                        {shift.productSummary.map((row) => {
+                          const unitPrice = Number(row.unitPrice || 0) || (Number(row.quantity) > 0 ? Number(row.amount) / Number(row.quantity) : 0);
+                          return (
+                            <tr key={row.name}>
+                              <td className="text-slate-200">{row.name}</td>
+                              <td className="num text-right text-slate-400">{formatMoney(unitPrice, currency)}</td>
+                              <td className="num text-center">{row.quantity}</td>
+                              <td className="num text-right">{formatMoney(row.amount, currency)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
+                      <tfoot>
+                        <tr className="border-t border-slate-700 bg-slate-900/40">
+                          <td className="font-bold text-slate-300">Total</td>
+                          <td />
+                          <td className="num text-center font-bold text-slate-200">
+                            {shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}
+                          </td>
+                          <td className="num text-right font-bold text-slate-200">
+                            {formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   )}
                 </div>
@@ -937,6 +1014,88 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
           ) : null}
         </div>
       ) : null}
+
+      <Modal
+        open={Boolean(tableDetail)}
+        title={tableDetail ? `Detalle · ${tableDetail.tableName}` : 'Detalle de mesa'}
+        subtitle={tableDetail ? 'Productos consumidos en esta mesa durante el turno' : undefined}
+        icon={<Eye className="h-4 w-4" />}
+        onClose={() => setTableDetailId(null)}
+        size="lg"
+        footer={
+          <button type="button" className="btn-secondary" onClick={() => setTableDetailId(null)}>
+            Cerrar
+          </button>
+        }
+      >
+        {tableDetail ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="kpi">
+                <p className="label mb-1">Partidas</p>
+                <p className="num text-sm font-bold text-slate-200">
+                  {tableDetail.plays.length}
+                  {tableDetail.openSessions.length > 0 ? ` + ${tableDetail.openSessions.length} abierta(s)` : ''}
+                </p>
+              </div>
+              <div className="kpi">
+                <p className="label mb-1">Ítems</p>
+                <p className="num text-sm font-bold text-slate-200">
+                  {tableDetail.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
+                </p>
+              </div>
+              <div className="kpi">
+                <p className="label mb-1">Consumo</p>
+                <p className="num text-sm font-bold text-emerald-300">{formatMoney(tableDetail.total, currency)}</p>
+              </div>
+            </div>
+
+            {tableDetail.items.length === 0 ? (
+              <p className="rounded-xl border border-slate-800 bg-[#08111d] px-3.5 py-5 text-center text-[11px] text-slate-500">
+                Esta mesa no tiene productos consumidos.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800">
+                <table className="data-table">
+                  <thead className="table-head">
+                    <tr>
+                      <th>Producto</th>
+                      <th className="text-right">P. Unit.</th>
+                      <th className="text-center">Cant.</th>
+                      <th className="text-right">Importe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableDetail.items.map((item) => {
+                      const unit = Number(item.quantity) > 0 ? Number(item.amount) / Number(item.quantity) : 0;
+                      return (
+                        <tr key={item.name}>
+                          <td className="text-slate-200">{item.name}</td>
+                          <td className="num text-right text-slate-400">{formatMoney(unit, currency)}</td>
+                          <td className="num text-center">{item.quantity}</td>
+                          <td className="num text-right font-bold text-slate-200">{formatMoney(item.amount, currency)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-slate-700 bg-slate-900/40">
+                      <td className="font-bold text-slate-300">Total</td>
+                      <td />
+                      <td className="num text-center font-bold text-slate-200">
+                        {tableDetail.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)}
+                      </td>
+                      <td className="num text-right font-bold text-slate-200">
+                        {formatMoney(tableDetail.total, currency)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </Modal>
     </Modal>
   );
 };

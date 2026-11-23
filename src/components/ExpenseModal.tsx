@@ -394,7 +394,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({ open, onClose }) => 
 
         <div className="flex justify-between rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-[10px]">
           <span className="text-slate-400">
-            {lines.length > 0 ? 'Total de productos' : 'Monto a registrar'}
+            {lines.length > 0 ? 'Total de productos comprados' : 'Monto a registrar'}
           </span>
           <span className="num font-bold text-amber-300">
             {formatMoney(

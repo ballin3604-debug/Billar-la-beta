@@ -287,6 +287,15 @@ export interface ProductSummaryRow {
   name: string;
   quantity: number;
   amount: number;
+  unitPrice?: number;
+}
+
+export interface QuickSalesSummary {
+  count: number;
+  openCount: number;
+  billiard: number;
+  products: number;
+  total: number;
 }
 
 export interface ClosingInfo {
@@ -336,6 +345,7 @@ export interface ShiftDetail {
   cashTransfers: CashTransfer[];
   qrPayments: QrPayment[];
   tableSummary: TableSummary[];
+  quickSalesSummary?: QuickSalesSummary;
   productSummary: ProductSummaryRow[];
   openSessions?: ShiftOpenSession[];
   openCustomerTabs?: CustomerTab[];
