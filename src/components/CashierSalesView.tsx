@@ -25,6 +25,7 @@ import {
 import { playToReceipt, saleToReceipt } from '../lib/receipt';
 import { EmptyState } from './ui/EmptyState';
 import { StatCard } from './ui/StatCard';
+import { DirectSaleModal } from './DirectSaleModal';
 
 type PaymentFilter = 'todo' | 'efectivo' | 'qr' | 'mixto';
 
@@ -74,6 +75,7 @@ export const CashierSalesView: React.FC = () => {
   const { currentShift, settings, refresh, showReceipt } = useApp();
   const [filter, setFilter] = useState<PaymentFilter>('todo');
   const [refreshing, setRefreshing] = useState(false);
+  const [directSaleOpen, setDirectSaleOpen] = useState(false);
   const currency = settings?.currency || 'Bs';
 
   const plays = currentShift?.tablePlays ?? [];
@@ -285,19 +287,29 @@ export const CashierSalesView: React.FC = () => {
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Historial de mesas cobradas y ventas rápidas, con el desglose de efectivo y QR para
+            Historial de mesas cobradas y ventas directas/clientes, con el desglose de efectivo y QR para
             respaldar tu caja. Puedes reimprimir el comprobante de cualquier venta vigente.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn-ghost border border-slate-800 px-2.5"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          title="Actualizar ventas del turno"
-        >
-          <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setDirectSaleOpen(true)}
+          >
+            <ShoppingBag className="h-4 w-4 text-sky-400" />
+            Venta directa / Cliente
+          </button>
+          <button
+            type="button"
+            className="btn-ghost border border-slate-800 px-2.5"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Actualizar ventas del turno"
+          >
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
@@ -576,6 +588,8 @@ export const CashierSalesView: React.FC = () => {
           administrador al cerrar el turno.
         </span>
       </div>
+
+      <DirectSaleModal open={directSaleOpen} onClose={() => setDirectSaleOpen(false)} />
     </div>
   );
 };

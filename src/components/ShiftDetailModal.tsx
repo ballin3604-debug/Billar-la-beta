@@ -80,6 +80,7 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<DetailTab>('resumen');
   const [tableDetailId, setTableDetailId] = useState<number | null>(null);
+  const [selectedSummaryKey, setSelectedSummaryKey] = useState<number | 'direct' | null>(null);
   const currency = settings?.currency || 'Bs';
   const isAdmin = user?.role === 'admin';
   const cashTransfers = shift?.cashTransfers ?? [];
@@ -144,6 +145,46 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
       total: items.reduce((sum, item) => sum + item.amount, 0),
     };
   }, [shift, tableDetailId]);
+
+  useEffect(() => {
+    if (!shift) { setSelectedSummaryKey(null); return; }
+    const withConsumption = shift.tableSummary.find((row) => Number(row.total || 0) > 0 || Number(row.products || 0) > 0 || Number(row.billiard || 0) > 0);
+    const first = withConsumption || shift.tableSummary.find((row) => row.tableNumber === 1) || shift.tableSummary[0];
+    setSelectedSummaryKey(first ? first.tableId : (shift.sales.length > 0 || (shift.openCustomerTabs?.length ?? 0) > 0 ? 'direct' : null));
+  }, [shift?.id]);
+
+  const selectedTableProducts = useMemo(() => {
+    if (!shift || selectedSummaryKey === null) return { title: 'Mesa', items: [] as Array<{ name: string; quantity: number; amount: number; unitPrice: number }> };
+    const toItems = (rows: Array<{ name: string; quantity: number; amount: number; unitPrice?: number }>) =>
+      rows.map((r) => ({ name: r.name, quantity: Number(r.quantity || 0), amount: Number(r.amount || 0), unitPrice: Number(r.unitPrice || 0) || (Number(r.quantity) > 0 ? Number(r.amount) / Number(r.quantity) : 0) }));
+    if (selectedSummaryKey === 'direct') {
+      const map = new Map<string, { name: string; quantity: number; amount: number }>();
+      const add = (name: string, quantity: number, amount: number) => {
+        const cur = map.get(name) || { name, quantity: 0, amount: 0 };
+        cur.quantity += Number(quantity || 0);
+        cur.amount += Number(amount || 0);
+        map.set(name, cur);
+      };
+      shift.sales.filter((s) => s.status === 'active').forEach((sale) => sale.items.forEach((i) => add(i.name, i.quantity, Number(i.price) * Number(i.quantity))));
+      (shift.openCustomerTabs ?? []).forEach((tab) => tab.items.forEach((i) => add(i.name, i.quantity, Number(i.price) * Number(i.quantity))));
+      const items = [...map.values()].map((i) => ({ ...i, unitPrice: i.quantity > 0 ? i.amount / i.quantity : 0 })).sort((a, b) => b.amount - a.amount);
+      return { title: 'Ventas Directas / Clientes', items };
+    }
+    const plays = shift.tablePlays.filter((p) => p.tableId === selectedSummaryKey && p.status === 'active');
+    const openSessions = (shift.openSessions ?? []).filter((s) => s.tableId === selectedSummaryKey);
+    const map = new Map<string, { name: string; quantity: number; amount: number }>();
+    const add = (name: string, quantity: number, amount: number) => {
+      const cur = map.get(name) || { name, quantity: 0, amount: 0 };
+      cur.quantity += Number(quantity || 0);
+      cur.amount += Number(amount || 0);
+      map.set(name, cur);
+    };
+    plays.forEach((p) => p.items.forEach((i) => add(i.name, i.quantity, Number(i.price) * Number(i.quantity))));
+    openSessions.forEach((s) => s.items.forEach((i) => add(i.name, i.quantity, Number(i.price) * Number(i.quantity))));
+    const items = [...map.values()].map((i) => ({ ...i, unitPrice: i.quantity > 0 ? i.amount / i.quantity : 0 })).sort((a, b) => b.amount - a.amount);
+    const row = shift.tableSummary.find((r) => r.tableId === selectedSummaryKey);
+    return { title: row?.tableName || 'Mesa', items };
+  }, [shift, selectedSummaryKey]);
 
   return (
     <Modal
@@ -515,12 +556,12 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 </div>
               ) : null}
 
-              <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-[#08111d]">
                   <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                     <TableProperties className="h-4 w-4 text-slate-500" />
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Tiempo Billar y Venta de Productos por mesa
+                      Tiempo Billar y Consumo por mesa
                     </p>
                   </div>
                   {shift.tableSummary.length === 0 ? (
@@ -530,66 +571,64 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                       <thead className="table-head">
                         <tr>
                           <th>Mesa</th>
-                          <th className="text-center">Partidas</th>
+                          <th className="text-center">N°</th>
                           <th className="text-right">Tiempo Billar</th>
-                          <th className="text-right">Venta de Productos</th>
-                          <th className="text-right">Total</th>
-                          <th className="text-right">Detalle</th>
+                          <th className="text-right">Consumo</th>
+                          <th className="text-right">Total (Billar + Consumo)</th>
+                          <th className="text-right">Ver</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {shift.tableSummary.map((row) => (
-                          <tr key={row.tableId}>
-                            <td className="font-medium text-slate-200">{row.tableName}</td>
-                            <td className="num text-center">
-                              {row.playsCount}
-                              {Number(row.openCount || 0) > 0 ? (
-                                <span className="ml-1 text-[9px] text-slate-500">
-                                  +{row.openCount}
-                                </span>
-                              ) : null}
-                            </td>
-                            <td className="num text-right">{formatMoney(row.billiard, currency)}</td>
-                            <td className="num text-right">{formatMoney(row.products, currency)}</td>
-                            <td className="num text-right font-bold text-slate-200">
-                              {formatMoney(row.total, currency)}
-                            </td>
-                            <td className="text-right">
-                              <button
-                                type="button"
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300"
-                                title={`Ver detalle de ${row.tableName}`}
-                                onClick={() => setTableDetailId(row.tableId)}
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {shift.tableSummary.map((row) => {
+                          const selected = selectedSummaryKey === row.tableId;
+                          return (
+                            <tr key={row.tableId} className={cn('cursor-pointer', selected && 'bg-emerald-500/[0.08]')} onClick={() => setSelectedSummaryKey(row.tableId)}>
+                              <td className="font-medium text-slate-200">{row.tableName}</td>
+                              <td className="num text-center">{row.playsCount}{Number(row.openCount || 0) > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{row.openCount}</span> : null}</td>
+                              <td className="num text-right">{formatMoney(row.billiard, currency)}</td>
+                              <td className="num text-right">{formatMoney(row.products, currency)}</td>
+                              <td className="num text-right font-bold text-slate-200">{formatMoney(row.total, currency)}</td>
+                              <td className="text-right">
+                                <button type="button" className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border transition', selected ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400 hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300')} title={`Ver detalle de ${row.tableName}`} onClick={(e) => { e.stopPropagation(); setSelectedSummaryKey(row.tableId); setTableDetailId(row.tableId); }}>
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                         {(() => {
                           const quick = shift.quickSalesSummary;
-                          const quickCount = quick?.count ?? shift.sales.filter((sale) => sale.status === 'active').length;
+                          const quickCount = quick?.count ?? shift.sales.filter((s) => s.status === 'active').length;
                           const quickOpen = quick?.openCount ?? (shift.openCustomerTabs?.length ?? 0);
-                          const quickProducts =
-                            quick?.products ??
-                            shift.sales.filter((sale) => sale.status === 'active').reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0) +
-                              (shift.openCustomerTabs ?? []).reduce((sum, tab) => sum + Number(tab.itemsAmount || 0), 0);
+                          const quickProducts = Number(quick?.products ?? 0) || (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) + (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0));
                           if (quickCount === 0 && quickOpen === 0 && quickProducts <= 0) return null;
+                          const selected = selectedSummaryKey === 'direct';
                           return (
-                            <tr className="bg-slate-900/40">
+                            <tr className={cn('cursor-pointer', selected ? 'bg-emerald-500/[0.08]' : 'bg-slate-900/40')} onClick={() => setSelectedSummaryKey('direct')}>
                               <td className="font-medium text-slate-200">Ventas Directas / Clientes</td>
-                              <td className="num text-center">
-                                {quickCount}
-                                {quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{quickOpen}</span> : null}
-                              </td>
+                              <td className="num text-center">{quickCount}{quickOpen > 0 ? <span className="ml-1 text-[9px] text-slate-500">+{quickOpen}</span> : null}</td>
                               <td className="num text-right">{formatMoney(0, currency)}</td>
                               <td className="num text-right">{formatMoney(quickProducts, currency)}</td>
                               <td className="num text-right font-bold text-slate-200">{formatMoney(quickProducts, currency)}</td>
-                              <td className="text-right text-[10px] text-slate-500">—</td>
+                              <td className="text-right">
+                                <button type="button" className={cn('inline-flex h-7 w-7 items-center justify-center rounded-lg border transition', selected ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400 hover:border-sky-500/40 hover:bg-sky-500/10 hover:text-sky-300')} title="Ver detalle de Ventas Directas / Clientes" onClick={(e) => { e.stopPropagation(); setSelectedSummaryKey('direct'); }}>
+                                  <Eye className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
                             </tr>
                           );
                         })()}
                       </tbody>
+                      <tfoot>
+                        <tr className="border-t border-slate-700 bg-slate-900/40 font-bold">
+                          <td className="text-slate-300">Total turno</td>
+                          <td className="num text-center text-slate-200">{shift.totals.playsCount}</td>
+                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.totalBilliard, currency)}</td>
+                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.totalProducts, currency)}</td>
+                          <td className="num text-right text-slate-200">{formatMoney(shift.totals.grossTotal, currency)}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
                     </table>
                   )}
                 </div>
@@ -597,53 +636,58 @@ export const ShiftDetailModal: React.FC<ShiftDetailModalProps> = ({
                 <div className="rounded-xl border border-slate-800 bg-[#08111d]">
                   <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
                     <ShoppingBag className="h-4 w-4 text-slate-500" />
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Venta de Productos
-                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Productos vendidos — {selectedTableProducts.title}</p>
                   </div>
-                  {shift.productSummary.length === 0 ? (
-                    <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin productos.</p>
+                  {selectedTableProducts.items.length === 0 ? (
+                    <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin consumo de productos en esta mesa.</p>
                   ) : (
                     <table className="data-table">
-                      <thead className="table-head">
-                        <tr>
-                          <th>Producto</th>
-                          <th className="text-right">P. Unit.</th>
-                          <th className="text-center">Cant.</th>
-                          <th className="text-right">Importe</th>
-                        </tr>
-                      </thead>
+                      <thead className="table-head"><tr><th>Producto</th><th className="text-right">P. Unit.</th><th className="text-center">Cant.</th><th className="text-right">Importe</th></tr></thead>
                       <tbody>
-                        {shift.productSummary.map((row) => {
-                          const unitPrice = Number(row.unitPrice || 0) || (Number(row.quantity) > 0 ? Number(row.amount) / Number(row.quantity) : 0);
-                          return (
-                            <tr key={row.name}>
-                              <td className="text-slate-200">{row.name}</td>
-                              <td className="num text-right text-slate-400">{formatMoney(unitPrice, currency)}</td>
-                              <td className="num text-center">{row.quantity}</td>
-                              <td className="num text-right">{formatMoney(row.amount, currency)}</td>
-                            </tr>
-                          );
-                        })}
+                        {selectedTableProducts.items.map((row) => (
+                          <tr key={row.name}>
+                            <td className="text-slate-200">{row.name}</td>
+                            <td className="num text-right text-slate-400">{formatMoney(row.unitPrice, currency)}</td>
+                            <td className="num text-center">{row.quantity}</td>
+                            <td className="num text-right">{formatMoney(row.amount, currency)}</td>
+                          </tr>
+                        ))}
                       </tbody>
-                      <tfoot>
-                        <tr className="border-t border-slate-700 bg-slate-900/40">
-                          <td className="font-bold text-slate-300">Total</td>
-                          <td />
-                          <td className="num text-center font-bold text-slate-200">
-                            {shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}
-                          </td>
-                          <td className="num text-right font-bold text-slate-200">
-                            {formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}
-                          </td>
-                        </tr>
-                      </tfoot>
+                      <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="font-bold text-slate-300">Total</td><td /><td className="num text-center font-bold text-slate-200">{selectedTableProducts.items.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num text-right font-bold text-slate-200">{formatMoney(selectedTableProducts.items.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
                     </table>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
+              <div className="rounded-xl border border-slate-800 bg-[#08111d]">
+                <div className="flex items-center gap-2 border-b border-slate-800 px-3.5 py-2.5">
+                  <ShoppingBag className="h-4 w-4 text-slate-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Productos vendidos del turno</p>
+                </div>
+                {shift.productSummary.length === 0 ? (
+                  <p className="px-3.5 py-5 text-center text-[11px] text-slate-500">Sin productos.</p>
+                ) : (
+                  <table className="data-table">
+                    <thead className="table-head"><tr><th>Producto</th><th className="text-right">P. Unit.</th><th className="text-center">Cant.</th><th className="text-right">Importe</th></tr></thead>
+                    <tbody>
+                      {shift.productSummary.map((row) => {
+                        const unitPrice = Number(row.unitPrice || 0) || (Number(row.quantity) > 0 ? Number(row.amount) / Number(row.quantity) : 0);
+                        return (
+                          <tr key={row.name}>
+                            <td className="text-slate-200">{row.name}</td>
+                            <td className="num text-right text-slate-400">{formatMoney(unitPrice, currency)}</td>
+                            <td className="num text-center">{row.quantity}</td>
+                            <td className="num text-right">{formatMoney(row.amount, currency)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot><tr className="border-t border-slate-700 bg-slate-900/40"><td className="font-bold text-slate-300">Total</td><td /><td className="num text-center font-bold text-slate-200">{shift.productSummary.reduce((sum, row) => sum + Number(row.quantity || 0), 0)}</td><td className="num text-right font-bold text-slate-200">{formatMoney(shift.productSummary.reduce((sum, row) => sum + Number(row.amount || 0), 0), currency)}</td></tr></tfoot>
+                  </table>
+                )}
+              </div>
+
+<div className="rounded-xl border border-slate-800 bg-[#08111d] p-3.5">
                 <div className="grid gap-3 text-[11px] sm:grid-cols-4">
                   <div>
                     <p className="label mb-1">Cambio</p>

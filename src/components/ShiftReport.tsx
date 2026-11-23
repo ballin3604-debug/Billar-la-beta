@@ -430,30 +430,10 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
             <tfoot>
               <tr className="bg-slate-100 font-bold">
                 <td className={tdClass}>Total</td>
-                <td className={`${tdClass} text-center`}>
-                  {shift.tableSummary.reduce((sum, row) => sum + Number(row.playsCount || 0), 0)}
-                </td>
-                <td className={tdClass}>
-                  {formatMoney(shift.tableSummary.reduce((sum, row) => sum + Number(row.billiard || 0), 0), currency)}
-                </td>
-                <td className={tdClass}>
-                  {formatMoney(
-                    shift.tableSummary.reduce((sum, row) => sum + Number(row.products || 0), 0) +
-                      (Number(shift.quickSalesSummary?.products ?? 0) ||
-                        (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) +
-                          (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0))),
-                    currency
-                  )}
-                </td>
-                <td className={tdClass}>
-                  {formatMoney(
-                    shift.tableSummary.reduce((sum, row) => sum + Number(row.total || 0), 0) +
-                      (Number(shift.quickSalesSummary?.products ?? 0) ||
-                        (shift.sales.filter((s) => s.status === 'active').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0) +
-                          (shift.openCustomerTabs ?? []).reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0))),
-                    currency
-                  )}
-                </td>
+                <td className={`${tdClass} text-center`}>{Number(shift.totals.playsCount || 0)}</td>
+                <td className={tdClass}>{formatMoney(Number(shift.totals.totalBilliard || 0), currency)}</td>
+                <td className={tdClass}>{formatMoney(Number(shift.totals.totalProducts || 0), currency)}</td>
+                <td className={tdClass}>{formatMoney(Number(shift.totals.grossTotal || 0), currency)}</td>
               </tr>
             </tfoot>
           </table>
