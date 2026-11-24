@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/format';
 
@@ -10,6 +11,9 @@ const sizes: Record<string, string> = {
   '2xl': 'max-w-6xl',
   full: 'max-w-7xl',
 };
+
+// Pila de modales abiertos: Escape solo debe cerrar el último (el visible arriba).
+const modalStack: symbol[] = [];
 
 interface ModalProps {
   open?: boolean;
@@ -38,10 +42,24 @@ export const Modal: React.FC<ModalProps> = ({
   className,
   bodyClassName,
 }) => {
+  const instanceId = useRef(Symbol('modal'));
+
+  useEffect(() => {
+    if (!open) return;
+    const id = instanceId.current;
+    modalStack.push(id);
+    return () => {
+      const index = modalStack.lastIndexOf(id);
+      if (index >= 0) modalStack.splice(index, 1);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open || disableClose) return;
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose?.();
+      if (event.key !== 'Escape') return;
+      if (modalStack[modalStack.length - 1] !== instanceId.current) return;
+      onClose?.();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -49,7 +67,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop animate-fade-in"
       onMouseDown={(event) => {
@@ -58,8 +76,14 @@ export const Modal: React.FC<ModalProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      <div className={cn('modal-card animate-pop-in', sizes[size], className)}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-800/80 px-4 py-3.5 sm:px-5">
+      <div
+        className={cn(
+          'modal-card animate-pop-in flex max-h-[calc(100vh-4rem)] flex-col',
+          sizes[size],
+          className
+        )}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-800/80 px-4 py-3.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             {icon ? (
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
@@ -83,16 +107,22 @@ export const Modal: React.FC<ModalProps> = ({
           ) : null}
         </div>
 
-        <div className={cn('max-h-[calc(100vh-11rem)] overflow-y-auto px-4 py-4 sm:px-5', bodyClassName)}>
+        <div
+          className={cn(
+            'modal-body min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5',
+            bodyClassName
+          )}
+        >
           {children}
         </div>
 
         {footer ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-800/80 px-4 py-3 sm:px-5">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-800/80 px-4 py-3 sm:px-5">
             {footer}
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

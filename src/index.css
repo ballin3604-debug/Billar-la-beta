@@ -318,6 +318,19 @@
     backdrop-filter: none !important;
   }
 
+  .modal-card {
+    display: block !important;
+    max-height: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .modal-body {
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
   .print-area .panel,
   .print-area .kpi,
   .print-area [class*="bg-"] {
