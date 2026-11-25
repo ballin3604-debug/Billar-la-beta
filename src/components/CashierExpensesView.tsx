@@ -17,13 +17,16 @@ import { EmptyState } from './ui/EmptyState';
 import { StatCard } from './ui/StatCard';
 
 export const CashierExpensesView: React.FC = () => {
-  const { currentShift, settings } = useApp();
+  const { currentShift, user, settings } = useApp();
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const currency = settings?.currency || 'Bs';
 
-  const ownExpenses = currentShift?.expenses ?? [];
-  const ownTransfers = currentShift?.cashTransfers ?? [];
+  const isOwn = (row: { createdBy?: number | null; createdByName?: string }) =>
+    !user ? true : row.createdBy != null ? row.createdBy === user.id : row.createdByName === user.name;
+
+  const ownExpenses = (currentShift?.expenses ?? []).filter(isOwn);
+  const ownTransfers = (currentShift?.cashTransfers ?? []).filter(isOwn);
   const activeExpenses = useMemo(
     () => ownExpenses.filter((expense) => expense.status === 'active'),
     [ownExpenses]

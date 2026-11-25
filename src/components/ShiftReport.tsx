@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Eye } from 'lucide-react';
 import type { ShiftDetail } from '../types';
 import { useApp } from '../context/AppContext';
 import {
@@ -36,6 +37,34 @@ const attendanceDuration = (checkInAt: string, checkOutAt: string) => {
 export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
   const { settings } = useApp();
   const currency = settings?.currency || 'Bs';
+  const [expandedTable, setExpandedTable] = useState<number | null>(null);
+
+  const tableItems = (tableId: number) => {
+    const items: Array<{ name: string; quantity: number; amount: number; source: string }> = [];
+    for (const play of shift.tablePlays) {
+      if (play.tableId !== tableId) continue;
+      for (const item of play.items) {
+        items.push({
+          name: item.name,
+          quantity: Number(item.quantity || 0),
+          amount: Number(item.quantity || 0) * Number(item.price || 0),
+          source: play.status === 'active' ? 'Cobrado' : 'Anulado',
+        });
+      }
+    }
+    for (const session of shift.openSessions ?? []) {
+      if (session.tableId !== tableId) continue;
+      for (const item of session.items) {
+        items.push({
+          name: item.name,
+          quantity: Number(item.quantity || 0),
+          amount: Number(item.quantity || 0) * Number(item.price || 0),
+          source: 'Abierta',
+        });
+      }
+    }
+    return items;
+  };
   const closing = shift.closing;
   const expected = closing?.expectedCash ?? shift.totals.expectedCash;
   const counted = closing?.countedCash ?? null;
@@ -388,22 +417,73 @@ export const ShiftReport: React.FC<ShiftReportProps> = ({ shift }) => {
               </tr>
             </thead>
             <tbody>
-              {shift.tableSummary.map((row) => (
-                <tr key={row.tableId}>
-                  <td className={tdClass}>{row.tableName}</td>
-                  <td className={`${tdClass} text-center`}>
-                    {Number(row.playsCount || 0)}
-                    {Number(row.openCount || 0) > 0 ? (
-                      <span className="ml-1 text-[9px] text-slate-500">
-                        + {row.openCount} abierta{Number(row.openCount) === 1 ? '' : 's'}
-                      </span>
+              {shift.tableSummary.map((row) => {
+                const items = tableItems(row.tableId);
+                const expanded = expandedTable === row.tableId;
+                return (
+                  <React.Fragment key={row.tableId}>
+                    <tr>
+                      <td className={tdClass}>
+                        <div className="flex items-center gap-1.5">
+                          <span>{row.tableName}</span>
+                          <button
+                            type="button"
+                            className="print:hidden inline-flex h-5 w-5 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-100"
+                            title={expanded ? 'Ocultar consumo' : 'Ver consumo'}
+                            onClick={() => setExpandedTable(expanded ? null : row.tableId)}
+                          >
+                            <Eye className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className={`${tdClass} text-center`}>
+                        {Number(row.playsCount || 0)}
+                        {Number(row.openCount || 0) > 0 ? (
+                          <span className="ml-1 text-[9px] text-slate-500">
+                            + {row.openCount} abierta{Number(row.openCount) === 1 ? '' : 's'}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className={tdClass}>{formatMoney(Number(row.billiard || 0), currency)}</td>
+                      <td className={tdClass}>{formatMoney(Number(row.products || 0), currency)}</td>
+                      <td className={`${tdClass} font-bold`}>{formatMoney(Number(row.total || 0), currency)}</td>
+                    </tr>
+                    {expanded ? (
+                      <tr>
+                        <td className="border border-slate-300 bg-slate-50 px-2 py-1.5" colSpan={5}>
+                          {items.length === 0 ? (
+                            <p className="text-[9px] text-slate-500">Sin consumo registrado.</p>
+                          ) : (
+                            <div className="text-[9px]">
+                              <p className="mb-1 font-bold text-slate-600">Consumo de {row.tableName}</p>
+                              <table className="w-full border-collapse">
+                                <thead>
+                                  <tr>
+                                    <th className="border border-slate-200 px-1 py-0.5 text-left">Producto</th>
+                                    <th className="border border-slate-200 px-1 py-0.5 text-center">Cant.</th>
+                                    <th className="border border-slate-200 px-1 py-0.5 text-right">Importe</th>
+                                    <th className="border border-slate-200 px-1 py-0.5 text-left">Estado</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {items.map((item, idx) => (
+                                    <tr key={`${item.name}-${idx}`}>
+                                      <td className="border border-slate-200 px-1 py-0.5">{item.name}</td>
+                                      <td className="border border-slate-200 px-1 py-0.5 text-center">{item.quantity}</td>
+                                      <td className="border border-slate-200 px-1 py-0.5 text-right">{formatMoney(item.amount, currency)}</td>
+                                      <td className="border border-slate-200 px-1 py-0.5">{item.source}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
                     ) : null}
-                  </td>
-                  <td className={tdClass}>{formatMoney(Number(row.billiard || 0), currency)}</td>
-                  <td className={tdClass}>{formatMoney(Number(row.products || 0), currency)}</td>
-                  <td className={`${tdClass} font-bold`}>{formatMoney(Number(row.total || 0), currency)}</td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                );
+              })}
               {(() => {
                 const quick = shift.quickSalesSummary;
                 const quickCount = quick?.count ?? shift.sales.filter((s) => s.status === 'active').length;

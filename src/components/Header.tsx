@@ -29,9 +29,8 @@ const TABS: Array<{
   { id: 'mesas', label: 'Mesas', icon: <LayoutGrid className="h-4 w-4" /> },
   {
     id: 'ventas',
-    label: 'Ventas',
+    label: 'Ventas de hoy',
     icon: <ShoppingBag className="h-4 w-4" />,
-    cashierOnly: true,
   },
   { id: 'caja', label: 'Caja', icon: <Wallet className="h-4 w-4" />, adminOnly: true },
   { id: 'historial', label: 'Historial', icon: <History className="h-4 w-4" />, adminOnly: true },

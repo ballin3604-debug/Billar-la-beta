@@ -72,14 +72,27 @@ const statusBadge = (status: 'active' | 'voided', activeLabel = 'Vigente') =>
   );
 
 export const CashierSalesView: React.FC = () => {
-  const { currentShift, settings, refresh, showReceipt } = useApp();
+  const { currentShift, settings, user, refresh, showReceipt } = useApp();
   const [filter, setFilter] = useState<PaymentFilter>('todo');
   const [refreshing, setRefreshing] = useState(false);
   const [directSaleOpen, setDirectSaleOpen] = useState(false);
   const currency = settings?.currency || 'Bs';
 
-  const plays = currentShift?.tablePlays ?? [];
-  const sales = currentShift?.sales ?? [];
+  const isOwnPlay = (play: { closedBy?: number | null; closedByName?: string }) =>
+    !user
+      ? true
+      : play.closedBy != null
+      ? play.closedBy === user.id
+      : play.closedByName === user.name;
+  const isOwnSale = (sale: { createdBy?: number | null; createdByName?: string }) =>
+    !user
+      ? true
+      : sale.createdBy != null
+      ? sale.createdBy === user.id
+      : sale.createdByName === user.name;
+
+  const plays = (currentShift?.tablePlays ?? []).filter(isOwnPlay);
+  const sales = (currentShift?.sales ?? []).filter(isOwnSale);
 
   const movements = useMemo<Movement[]>(() => {
     const list: Movement[] = [];

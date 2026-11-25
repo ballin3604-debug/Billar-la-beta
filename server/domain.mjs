@@ -470,7 +470,9 @@ function mapPlay(row, items = []) {
     tableNumber: row.table_number,
     tableName: row.table_name,
     itemNumber: row.item_number,
+    openedBy: row.opened_by ?? null,
     openedByName: row.opened_by_name,
+    closedBy: row.closed_by ?? null,
     closedByName: row.closed_by_name,
     startTime: row.start_time,
     endTime: row.end_time,
@@ -498,6 +500,7 @@ function mapSale(row, items = []) {
   return {
     id: row.id,
     shiftId: row.shift_id,
+    createdBy: row.created_by ?? null,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
     totalAmount: row.total_amount,
@@ -535,6 +538,7 @@ function mapExpense(row, items = []) {
   return {
     id: row.id,
     shiftId: row.shift_id,
+    createdBy: row.created_by ?? null,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
     amount: row.amount,
@@ -552,6 +556,7 @@ function mapCashTransfer(row) {
   return {
     id: row.id,
     shiftId: row.shift_id,
+    createdBy: row.created_by ?? null,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
     direction: row.direction,
@@ -1159,11 +1164,14 @@ export function getShiftDetail(shiftId, viewer = null, options = {}) {
  * esperado, la diferencia de arqueo ni la auditoría.
  */
 export function getCashierShiftDetail(shiftId, viewer) {
+  // Vista personal: solo refleja lo que este usuario vendió e hizo de egresos.
+  // No expone efectivo esperado, arqueo ni auditoría del turno completo.
   const shift = getShiftRow(shiftId);
   if (!shift) return null;
 
   const window = shiftDateWindow(shift.date_start);
   const userId = viewer?.id ?? 0;
+
   const expenseRows = all(
     'SELECT * FROM expenses WHERE shift_id = ? AND created_by = ? ORDER BY created_at ASC, id ASC',
     shiftId,
@@ -1180,9 +1188,7 @@ export function getCashierShiftDetail(shiftId, viewer) {
   );
   const expenseItemsByExpense = new Map();
   for (const row of expenseItemRows) {
-    if (!expenseItemsByExpense.has(row.expense_id)) {
-      expenseItemsByExpense.set(row.expense_id, []);
-    }
+    if (!expenseItemsByExpense.has(row.expense_id)) expenseItemsByExpense.set(row.expense_id, []);
     expenseItemsByExpense.get(row.expense_id).push({
       id: row.id,
       productId: row.product_id,
@@ -1193,41 +1199,35 @@ export function getCashierShiftDetail(shiftId, viewer) {
     });
   }
   const expenses = expenseRows
-    .map((row) => mapExpense(row, expenseItemsByExpense.get(row.id) || []));
-  const allExpenseRows = all(
-    'SELECT amount, status, created_at FROM expenses WHERE shift_id = ?',
-    shiftId
-  );
-  const totalExpenses = round2(
-    allExpenseRows
-      .filter((e) => e.status === 'active')
-      .reduce((sum, e) => sum + Number(e.amount || 0), 0)
-  );
+    .map((row) => mapExpense(row, expenseItemsByExpense.get(row.id) || []))
+    .filter((expense) => isInsideShiftWindow(expense.createdAt, window));
 
   const cashTransferRows = all(
     'SELECT * FROM cash_transfers WHERE shift_id = ? AND created_by = ? ORDER BY created_at ASC, id ASC',
     shiftId,
     userId
   );
-  const cashTransfers = cashTransferRows.map(mapCashTransfer);
-  const allTransferRows = all(
-    'SELECT amount, status, direction, created_at FROM cash_transfers WHERE shift_id = ?',
-    shiftId
-  );
-  const activeAllTransfers = allTransferRows.filter((t) => t.status === 'active');
+  const cashTransfers = cashTransferRows
+    .map(mapCashTransfer)
+    .filter((transfer) => isInsideShiftWindow(transfer.createdAt, window));
 
+  // Ventas del usuario: partidas que él cerró y ventas rápidas/cliente que creó.
   const playsRows = all(
-    'SELECT * FROM plays WHERE shift_id = ? ORDER BY start_time ASC, id ASC',
-    shiftId
+    'SELECT * FROM plays WHERE shift_id = ? AND closed_by = ? ORDER BY start_time ASC, id ASC',
+    shiftId,
+    userId
   );
-  const sessionItemRows = all(
-    `SELECT si.*, p.id AS play_id
-     FROM session_items si
-     JOIN plays p ON p.session_id = si.session_id
-     WHERE p.shift_id = ?
-     ORDER BY si.id ASC`,
-    shiftId
-  );
+  const sessionItemRows = playsRows.length
+    ? all(
+        `SELECT si.*, p.id AS play_id
+         FROM session_items si
+         JOIN plays p ON p.session_id = si.session_id
+         WHERE p.shift_id = ? AND p.closed_by = ?
+         ORDER BY si.id ASC`,
+        shiftId,
+        userId
+      )
+    : [];
   const sessionItemsByPlay = new Map();
   for (const row of sessionItemRows) {
     if (!sessionItemsByPlay.has(row.play_id)) sessionItemsByPlay.set(row.play_id, []);
@@ -1239,22 +1239,26 @@ export function getCashierShiftDetail(shiftId, viewer) {
       quantity: row.quantity,
     });
   }
-  const plays = playsRows.map((row) =>
-    mapPlay(row, sessionItemsByPlay.get(row.id) || [])
-  );
+  const plays = playsRows
+    .map((row) => mapPlay(row, sessionItemsByPlay.get(row.id) || []))
+    .filter((play) => isInsideShiftWindow(play.startTime, window));
 
   const saleRows = all(
-    'SELECT * FROM sales WHERE shift_id = ? ORDER BY created_at ASC, id ASC',
-    shiftId
+    'SELECT * FROM sales WHERE shift_id = ? AND created_by = ? ORDER BY created_at ASC, id ASC',
+    shiftId,
+    userId
   );
-  const saleItemRows = all(
-    `SELECT si.*
-     FROM sale_items si
-     JOIN sales s ON s.id = si.sale_id
-     WHERE s.shift_id = ?
-     ORDER BY si.id ASC`,
-    shiftId
-  );
+  const saleItemRows = saleRows.length
+    ? all(
+        `SELECT si.*
+         FROM sale_items si
+         JOIN sales s ON s.id = si.sale_id
+         WHERE s.shift_id = ? AND s.created_by = ?
+         ORDER BY si.id ASC`,
+        shiftId,
+        userId
+      )
+    : [];
   const saleItemsBySale = new Map();
   for (const row of saleItemRows) {
     if (!saleItemsBySale.has(row.sale_id)) saleItemsBySale.set(row.sale_id, []);
@@ -1266,61 +1270,35 @@ export function getCashierShiftDetail(shiftId, viewer) {
       quantity: row.quantity,
     });
   }
-  const sales = saleRows.map((row) =>
-    mapSale(row, saleItemsBySale.get(row.id) || [])
-  );
+  const sales = saleRows
+    .map((row) => mapSale(row, saleItemsBySale.get(row.id) || []))
+    .filter((sale) => isInsideShiftWindow(sale.createdAt, window));
 
   const activePlays = plays.filter((play) => play.status === 'active');
   const activeSales = sales.filter((sale) => sale.status === 'active');
+  const activeExpenses = expenses.filter((expense) => expense.status === 'active');
+  const activeTransfers = cashTransfers.filter((transfer) => transfer.status === 'active');
 
-  const activePlaysIn = activePlays.filter((play) => isInsideShiftWindow(play.startTime, window));
-  const activeSalesIn = activeSales.filter((sale) => isInsideShiftWindow(sale.createdAt, window));
-  const activeExpensesAllIn = allExpenseRows.filter((e) => e.status === 'active');
-  const activeTransfersAllIn = activeAllTransfers;
-
-  const totalBilliardPlays = round2(activePlaysIn.reduce((sum, play) => sum + Number(play.billiardAmount || 0), 0));
-  const tableProductsPlays = round2(activePlaysIn.reduce((sum, play) => sum + Number(play.productsAmount || 0), 0));
-  const barSales = round2(activeSalesIn.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0));
-
-  const openSessionRows = all(
-    `SELECT s.*, t.number AS table_number, t.name AS table_name
-     FROM sessions s JOIN tables t ON t.id = s.table_id
-     WHERE s.shift_id = ? AND s.status = 'open' ORDER BY t.number ASC, s.id ASC`,
-    shiftId
-  );
-  const settings = getSettings();
-  const minimumCharge = Number(settings.minimumPlayCharge || 0);
-  const openSessions = openSessionRows.map((row) => {
-    const items = getSessionItems(row.id);
-    const frozenMs = row.checkout_started_at ? new Date(row.checkout_started_at).getTime() : Number.NaN;
-    const calculation = computeSessionCost(row.start_time, row.rate_per_hour, minimumCharge, Number.isFinite(frozenMs) ? frozenMs : Date.now(), row.paused_seconds);
-    const productsAmount = itemsTotal(items);
-    return { billiardAmount: calculation.cost, productsAmount, outsideShiftDate: !isInsideShiftWindow(row.start_time, window) };
-  });
-  const openCustomerTabs = getOpenCustomerTabs(shiftId).map((tab) => ({ ...tab, outsideShiftDate: !isInsideShiftWindow(tab.createdAt, window) }));
-  const inWindowOpenSessions = openSessions.filter((s) => !s.outsideShiftDate);
-  const inWindowOpenTabs = openCustomerTabs.filter((t) => !t.outsideShiftDate);
-  const pendingBilliard = round2(inWindowOpenSessions.reduce((sum, s) => sum + Number(s.billiardAmount || 0), 0));
-  const openTableProducts = round2(inWindowOpenSessions.reduce((sum, s) => sum + Number(s.productsAmount || 0), 0));
-  const customerTabProducts = round2(inWindowOpenTabs.reduce((sum, t) => sum + Number(t.itemsAmount || 0), 0));
-  const pendingTotal = round2(pendingBilliard + openTableProducts + customerTabProducts);
-
-  const totalBilliard = round2(totalBilliardPlays + pendingBilliard);
-  const tableProducts = round2(tableProductsPlays + openTableProducts);
-  const totalProducts = round2(tableProducts + customerTabProducts + barSales);
+  const totalBilliard = round2(activePlays.reduce((sum, play) => sum + Number(play.billiardAmount || 0), 0));
+  const tableProducts = round2(activePlays.reduce((sum, play) => sum + Number(play.productsAmount || 0), 0));
+  const barSales = round2(activeSales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0));
+  const totalProducts = round2(tableProducts + barSales);
   const grossTotal = round2(totalBilliard + totalProducts);
-  const totalWithChange = round2(Number(shift.initial_cash || 0) + grossTotal);
   const totalQr = round2(
-    activePlaysIn.reduce((sum, play) => sum + Number(play.qrAmount || 0), 0) +
-      activeSalesIn.reduce((sum, sale) => sum + Number(sale.qrAmount || 0), 0)
+    activePlays.reduce((sum, play) => sum + Number(play.qrAmount || 0), 0) +
+      activeSales.reduce((sum, sale) => sum + Number(sale.qrAmount || 0), 0)
   );
   const cashCollected = round2(
-    activePlaysIn.reduce((sum, play) => sum + Number(play.cashAmount || 0), 0) +
-      activeSalesIn.reduce((sum, sale) => sum + Number(sale.cashAmount || 0), 0)
+    activePlays.reduce((sum, play) => sum + Number(play.cashAmount || 0), 0) +
+      activeSales.reduce((sum, sale) => sum + Number(sale.cashAmount || 0), 0)
   );
-  const cashTransfersIn = round2(activeTransfersAllIn.filter((t) => t.direction === 'cash_to_qr').reduce((sum, t) => sum + Number(t.amount || 0), 0));
-  const cashTransfersOut = round2(activeTransfersAllIn.filter((t) => t.direction === 'qr_to_cash').reduce((sum, t) => sum + Number(t.amount || 0), 0));
-  const expectedCash = round2(Number(shift.initial_cash || 0) + cashCollected - totalExpenses + cashTransfersIn - cashTransfersOut);
+  const totalExpenses = round2(activeExpenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0));
+  const cashTransfersIn = round2(
+    activeTransfers.filter((t) => t.direction === 'cash_to_qr').reduce((sum, t) => sum + Number(t.amount || 0), 0)
+  );
+  const cashTransfersOut = round2(
+    activeTransfers.filter((t) => t.direction === 'qr_to_cash').reduce((sum, t) => sum + Number(t.amount || 0), 0)
+  );
 
   const tableMap = new Map();
   for (const play of activePlays) {
@@ -1339,9 +1317,7 @@ export function getCashierShiftDetail(shiftId, viewer) {
     current.total = round2(current.billiard + current.products);
     tableMap.set(play.tableId, current);
   }
-  const tableSummary = [...tableMap.values()].sort(
-    (a, b) => a.tableNumber - b.tableNumber
-  );
+  const tableSummary = [...tableMap.values()].sort((a, b) => a.tableNumber - b.tableNumber);
 
   const qrPayments = [
     ...activePlays
@@ -1364,7 +1340,7 @@ export function getCashierShiftDetail(shiftId, viewer) {
         source: 'barra',
         description: sale.items.length
           ? sale.items.map((item) => `${item.quantity}x ${item.name}`).join(', ')
-          : 'Venta de barra',
+          : 'Venta de Productos',
         amount: sale.qrAmount,
         timestamp: sale.createdAt,
         userName: sale.createdByName,
@@ -1405,30 +1381,19 @@ export function getCashierShiftDetail(shiftId, viewer) {
       tableProducts,
       barSales,
       grossTotal,
-      totalWithChange,
       totalQr,
       totalQrNet: round2(totalQr + cashTransfersOut - cashTransfersIn),
       totalExpenses,
       cashCollected,
-      expectedCash,
-      pendingTotal,
       cashTransfersIn,
       cashTransfersOut,
-      transfersCount: activeAllTransfers.length,
-      playsCount: activePlaysIn.length,
-      salesCount: activeSalesIn.length,
-      expensesCount: activeExpensesAllIn.length,
+      transfersCount: activeTransfers.length,
+      playsCount: activePlays.length,
+      salesCount: activeSales.length,
+      expensesCount: activeExpenses.length,
       itemsCount:
-        activePlays.reduce(
-          (sum, play) =>
-            sum + play.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-          0
-        ) +
-        activeSales.reduce(
-          (sum, sale) =>
-            sum + sale.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
-          0
-        ),
+        activePlays.reduce((sum, play) => sum + play.items.reduce((s, i) => s + i.quantity, 0), 0) +
+        activeSales.reduce((sum, sale) => sum + sale.items.reduce((s, i) => s + i.quantity, 0), 0),
     },
     tablePlays: plays,
     sales,
@@ -1439,7 +1404,6 @@ export function getCashierShiftDetail(shiftId, viewer) {
     productSummary: [],
     attendance: attendanceRows.map(mapAttendance),
     closing: null,
-    audit: undefined,
   };
 }
 

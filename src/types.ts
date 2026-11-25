@@ -116,7 +116,9 @@ export interface Play {
   tableNumber: number;
   tableName: string;
   itemNumber: number;
+  openedBy?: number | null;
   openedByName: string;
+  closedBy?: number | null;
   closedByName: string;
   startTime: string;
   endTime: string;
@@ -206,6 +208,7 @@ export interface ShiftOutOfRange {
 export interface Sale {
   id: number;
   shiftId: number;
+  createdBy?: number | null;
   createdByName: string;
   createdAt: string;
   totalAmount: number;
@@ -234,6 +237,7 @@ export interface ExpenseItem {
 export interface Expense {
   id: number;
   shiftId: number;
+  createdBy?: number | null;
   createdByName: string;
   createdAt: string;
   amount: number;
@@ -249,6 +253,7 @@ export interface Expense {
 export interface CashTransfer {
   id: number;
   shiftId: number;
+  createdBy?: number | null;
   createdByName: string;
   createdAt: string;
   direction: TransferDirection;

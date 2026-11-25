@@ -107,14 +107,14 @@ const AppShell: React.FC = () => {
 
   const isAdmin = user?.role === 'admin';
   const allowedTabs: Tab[] = isAdmin
-    ? ['mesas', 'caja', 'historial', 'ajustes']
+    ? ['mesas', 'ventas', 'caja', 'historial', 'ajustes']
     : ['mesas', 'ventas', 'egresos', 'cierre'];
   const activeTab = allowedTabs.includes(tab) ? tab : 'mesas';
 
   useEffect(() => {
     if (!user) return;
     const allowed = user.role === 'admin'
-      ? ['mesas', 'caja', 'historial', 'ajustes']
+      ? ['mesas', 'ventas', 'caja', 'historial', 'ajustes']
       : ['mesas', 'ventas', 'egresos', 'cierre'];
     if (!allowed.includes(tab)) setTab('mesas');
   }, [setTab, tab, user]);

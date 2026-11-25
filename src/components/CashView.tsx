@@ -44,8 +44,7 @@ import { ExpenseModal } from './ExpenseModal';
 import { ExpenseReportModal } from './ExpenseReport';
 import { CloseShiftModal } from './CloseShiftModal';
 import { ShiftReportModal } from './ShiftReport';
-import { BarSaleModal } from './BarSaleModal';
-import { CustomerTabsModal } from './CustomerTabsModal';
+import { DirectSaleModal } from './DirectSaleModal';
 import { TransferModal } from './TransferModal';
 import { ReasonDialog } from './ui/ReasonDialog';
 import { cn as cnClass } from '../lib/format';
@@ -111,8 +110,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
   const [expenseReportOpen, setExpenseReportOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [barOpen, setBarOpen] = useState(false);
-  const [customerTabsOpen, setCustomerTabsOpen] = useState(false);
+  const [directSaleOpen, setDirectSaleOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [voidTarget, setVoidTarget] = useState<VoidTarget | null>(null);
   const [voidBusy, setVoidBusy] = useState(false);
@@ -236,13 +234,9 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
             <FileSpreadsheet className="h-4 w-4 text-rose-400" />
             Planilla de gastos
           </button>
-          <button type="button" className="btn-secondary" onClick={() => setCustomerTabsOpen(true)}>
-            <Users className="h-4 w-4 text-violet-400" />
-            Ventas por cliente
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => setBarOpen(true)}>
-            <CupSoda className="h-4 w-4 text-sky-400" />
-            Venta rápida
+          <button type="button" className="btn-secondary" onClick={() => setDirectSaleOpen(true)}>
+            <ShoppingBag className="h-4 w-4 text-sky-400" />
+            Venta de Productos
           </button>
           <button type="button" className="btn-secondary" onClick={() => setTransferOpen(true)}>
             <ArrowLeftRight className="h-4 w-4 text-violet-400" />
@@ -960,8 +954,7 @@ export const CashView: React.FC<CashViewProps> = ({ onShiftClosed }) => {
       </div>
 
       <ExpenseModal open={expenseOpen} onClose={() => setExpenseOpen(false)} />
-      <BarSaleModal open={barOpen} onClose={() => setBarOpen(false)} />
-      <CustomerTabsModal open={customerTabsOpen} onClose={() => setCustomerTabsOpen(false)} />
+      <DirectSaleModal open={directSaleOpen} onClose={() => setDirectSaleOpen(false)} />
       <TransferModal open={transferOpen} onClose={() => setTransferOpen(false)} />
       <CloseShiftModal
         open={closeOpen}
