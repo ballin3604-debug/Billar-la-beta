@@ -11,7 +11,9 @@ desktop/*.exe
 
 # Artefactos movidos fuera del repo (C:\Billar-Archivos-NoCodigo)
 release/
-Billar-Actualizacion-Ventas-Cliente.zip
+*.zip
+*.7z
+*.rar
 Actualizar-Billar.bat
 Actualizar-Billar.ps1
 LEEME-ACTUALIZACION.txt
